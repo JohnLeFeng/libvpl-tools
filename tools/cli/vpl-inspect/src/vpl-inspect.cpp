@@ -192,6 +192,7 @@ const char *_print_CodecID(mfxU32 codecID) {
         STRING_OPTION(MFX_CODEC_VC1);
         STRING_OPTION(MFX_CODEC_VP8);
         STRING_OPTION(MFX_CODEC_VP9);
+        STRING_OPTION(MFX_CODEC_VVC);
         default:
             break;
     }
@@ -456,6 +457,16 @@ const char *_print_ProfileType(mfxU32 fourcc, mfxU32 type) {
 
                 default:
                     return "<unknown MFX_CODEC_AV1 profile>";
+            }
+        }
+
+        case MFX_CODEC_VVC: {
+            switch (type) {
+                STRING_OPTION(MFX_PROFILE_UNKNOWN);
+                STRING_OPTION(MFX_PROFILE_VVC_MAIN10);
+                STRING_OPTION(MFX_PROFILE_VVC_MAIN10_STILL_PICTURE);
+                default:
+                    return "<unknown MFX_CODEC_VVC profile>";
             }
         }
     }
