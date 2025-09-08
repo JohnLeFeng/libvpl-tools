@@ -188,7 +188,7 @@ void PrintStreamInfo(sInputParams* pParams,
     printf("Signal info\t%s\n",
            (VPP_FILTER_DISABLED != pParams->videoSignalInfoParam[0].mode) ? "ON" : "OFF");
     printf("Scaling\t\t%s\n", (VPP_FILTER_DISABLED != pParams->bScaling) ? "ON" : "OFF");
-    printf("CromaSiting\t\t%s\n", (VPP_FILTER_DISABLED != pParams->bChromaSiting) ? "ON" : "OFF");
+    printf("CromaSiting\t%s\n", (VPP_FILTER_DISABLED != pParams->bChromaSiting) ? "ON" : "OFF");
     printf("Denoise\t\t%s\n",
            (VPP_FILTER_DISABLED != pParams->denoiseParam[0].mode) ? "ON" : "OFF");
 #ifdef ENABLE_MCTF
@@ -205,11 +205,24 @@ void PrintStreamInfo(sInputParams* pParams,
         else if (MFX_FRCALGM_DISTRIBUTED_TIMESTAMP == pParams->frcParam[0].algorithm) {
             printf("FRC:AdvancedPTS\tON\n");
         }
+#ifdef ONEVPL_EXPERIMENTAL
+        else if (MFX_FRCALGM_AI_FRAME_INTERPOLATION == pParams->frcParam[0].algorithm) {
+            printf("FRC:AI-Interp\tON\n");
+        }
+#endif
         else {
             printf("FRC:\t\tON\n");
         }
     }
     //printf("FRC:Advanced\t%s\n",   (VPP_FILTER_DISABLED != pParams->frcParam.mode)  ? "ON": "OFF");
+#ifdef ONEVPL_EXPERIMENTAL
+    if (VPP_FILTER_ENABLED_CONFIGURED == pParams->srParam[0].mode) {
+        printf("SR:AI-Default\tON\n");
+    }
+    else {
+        printf("SR:AI-Default\tOFF\n");
+    }
+#endif
     // MSDK 3.0
     printf("GamutMapping \t%s\n",
            (VPP_FILTER_DISABLED != pParams->gamutParam[0].mode) ? "ON" : "OFF");
