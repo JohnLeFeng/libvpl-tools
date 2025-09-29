@@ -1209,22 +1209,9 @@ mfxStatus CSmplYUVWriter::WriteNextFrame(mfxFrameSurface1* pSurface) {
             for (i = 0; i < pInfo.CropH; i++) {
                 mfxU8* pBuffer = ((mfxU8*)pData.Y) + (pInfo.CropY * pData.Pitch + pInfo.CropX * 4) +
                                  i * pData.Pitch;
-                if (pInfo.Shift) {
-                    // Bits will be shifted to the lower position
-                    for (int idx = 0; idx < pInfo.CropW * 2; idx++) {
-                        tmp[idx] = ((mfxU16*)pBuffer)[idx] >> shiftSizeLuma;
-                    }
-
-                    MSDK_CHECK_NOT_EQUAL(
-                        fwrite(((const mfxU8*)tmp.data()), 4, pInfo.CropW, dstFile),
-                        pInfo.CropW,
-                        MFX_ERR_UNDEFINED_BEHAVIOR);
-                }
-                else {
-                    MSDK_CHECK_NOT_EQUAL(fwrite(pBuffer, 4, pInfo.CropW, dstFile),
-                                         pInfo.CropW,
-                                         MFX_ERR_UNDEFINED_BEHAVIOR);
-                }
+                MSDK_CHECK_NOT_EQUAL(fwrite(pBuffer, 4, pInfo.CropW, dstFile),
+                                     pInfo.CropW,
+                                     MFX_ERR_UNDEFINED_BEHAVIOR);
             }
             return MFX_ERR_NONE;
         } break;
