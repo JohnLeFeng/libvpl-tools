@@ -1606,4 +1606,6 @@ private:
 
 mfxStatus SetParameters(mfxSession session, MfxVideoParamsWrapper& par, const std::string& params);
 
+bool ReadParamFromEnvVar(mfxU32& param, const std::string& envVarString);
+
 #endif //__SAMPLE_UTILS_H__

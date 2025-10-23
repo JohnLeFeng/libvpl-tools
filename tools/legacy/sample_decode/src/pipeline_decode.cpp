@@ -1777,6 +1777,14 @@ mfxStatus CDecodingPipeline::RunDecoding() {
     time_t start_time = time(0);
     std::thread deliverThread;
 
+    // optionally read environment variable to set a different SyncOp timeout
+    mfxU32 syncopTimeout     = MSDK_DEC_WAIT_INTERVAL;
+    mfxU32 env_syncopTimeout = 0;
+    if (ReadParamFromEnvVar(env_syncopTimeout, std::string("VPL_SYNCOP_TIMEOUT_DEC")) == true) {
+        printf("VPP: VPL_SYNCOP_TIMEOUT_DEC set, timeout = %u msec\n", env_syncopTimeout);
+        syncopTimeout = env_syncopTimeout;
+    }
+
     if (m_eWorkMode == MODE_RENDERING) {
         m_pDeliverOutputSemaphore = new MSDKSemaphore(sts);
         m_pDeliveredEvent         = new MSDKEvent(sts, false, false);
@@ -1848,14 +1856,14 @@ mfxStatus CDecodingPipeline::RunDecoding() {
                 (m_OutputSurfacesPool.GetSurfaceCount() == m_mfxVideoParams.AsyncDepth)) {
 #endif
                 // we stuck with no free surface available, now we will sync...
-                sts = SyncOutputSurface(MSDK_DEC_WAIT_INTERVAL);
+                sts = SyncOutputSurface(syncopTimeout);
                 if (MFX_ERR_MORE_DATA == sts) {
                     if ((m_eWorkMode == MODE_PERFORMANCE) || (m_eWorkMode == MODE_FILE_DUMP)) {
                         sts = MFX_ERR_NOT_FOUND;
                     }
                     else if (m_eWorkMode == MODE_RENDERING) {
                         if (m_synced_count != m_output_count) {
-                            sts = m_pDeliveredEvent->TimedWait(MSDK_DEC_WAIT_INTERVAL);
+                            sts = m_pDeliveredEvent->TimedWait(syncopTimeout);
                         }
                         else {
                             sts = MFX_ERR_NOT_FOUND;
@@ -1936,7 +1944,7 @@ mfxStatus CDecodingPipeline::RunDecoding() {
                         //in low latency mode device busy leads to increasing of latency
                         //printf("Warning : latency increased due to MFX_WRN_DEVICE_BUSY\n");
                     }
-                    mfxStatus _sts = SyncOutputSurface(MSDK_DEC_WAIT_INTERVAL);
+                    mfxStatus _sts = SyncOutputSurface(syncopTimeout);
                     // note: everything except MFX_ERR_NONE are errors at this point
                     if (MFX_ERR_NONE == _sts) {
                         sts = MFX_WRN_DEVICE_BUSY;
@@ -1975,7 +1983,7 @@ mfxStatus CDecodingPipeline::RunDecoding() {
             else if ((MFX_ERR_MORE_DATA == sts) && !pBitstream) {
                 // that's it - we reached end of stream; now we need to render bufferred data...
                 do {
-                    sts = SyncOutputSurface(MSDK_DEC_WAIT_INTERVAL);
+                    sts = SyncOutputSurface(syncopTimeout);
                 } while (MFX_ERR_NONE == sts);
 
                 MSDK_IGNORE_MFX_STS(sts, MFX_ERR_MORE_DATA);

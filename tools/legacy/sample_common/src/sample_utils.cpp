@@ -8,6 +8,7 @@
 
 #include <math.h>
 #include <algorithm>
+#include <cstdlib>
 #include <iostream>
 #include <map>
 
@@ -2957,4 +2958,24 @@ mfxStatus SetParameters(mfxSession session, MfxVideoParamsWrapper& par, const st
         sts = SetParameter(config_interface, par, params_str.substr(pos));
     }
     return sts;
+}
+
+// read value of environment variable as U32
+bool ReadParamFromEnvVar(mfxU32& param, const std::string& envVarString) {
+    param = 0;
+
+    const char* valueStr = std::getenv(envVarString.c_str());
+    if (!valueStr)
+        return false;
+
+    mfxU32 t_param = 0;
+    try {
+        t_param = std::stoul(std::string(valueStr));
+    }
+    catch (...) {
+        return false;
+    }
+
+    param = t_param;
+    return true;
 }

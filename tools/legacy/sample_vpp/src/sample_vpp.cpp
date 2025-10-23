@@ -5,6 +5,7 @@
   ############################################################################*/
 // VPP tool using Intel® Video Processing Library (Intel® VPL)
 #include "parameters_dumper.h"
+#include "sample_utils.h"
 #include "sample_vpp_pts.h"
 #include "sample_vpp_roi.h"
 #include "sample_vpp_utils.h"
@@ -184,7 +185,8 @@ void SaveRealInfoForSvcOut(sSVCLayerDescr in[8], mfxFrameInfo out[8], mfxU32 fou
 mfxStatus OutputProcessFrame(sAppResources Resources,
                              mfxFrameInfo* pOutFrameInfo,
                              mfxU32& nFrames,
-                             mfxU32 paramID) {
+                             mfxU32 paramID,
+                             mfxU32 syncopTimeout) {
     mfxStatus sts;
     mfxFrameSurfaceWrap* pProcessedSurface;
 
@@ -192,7 +194,7 @@ mfxStatus OutputProcessFrame(sAppResources Resources,
          Resources.pSurfStore->m_SyncPoints.pop_front()) {
         sts = Resources.pProcessor->mfxSession.SyncOperation(
             Resources.pSurfStore->m_SyncPoints.front().first,
-            MSDK_VPP_WAIT_INTERVAL);
+            syncopTimeout);
         if (sts == MFX_WRN_IN_EXECUTION) {
             printf("SyncOperation wait interval exceeded\n");
         }
@@ -383,6 +385,14 @@ int sample_vpp_main(int argc, char* argv[]) {
                                           &defaultInVideoSignalInfoParam,
                                           &defaultOutVideoSignalInfoParam,
                                           &defaultSRParam };
+
+    // optionally read environment variable to set a different SyncOp timeout
+    mfxU32 syncopTimeout     = MSDK_VPP_WAIT_INTERVAL;
+    mfxU32 env_syncopTimeout = 0;
+    if (ReadParamFromEnvVar(env_syncopTimeout, std::string("VPL_SYNCOP_TIMEOUT_VPP")) == true) {
+        printf("VPP: VPL_SYNCOP_TIMEOUT_VPP set, timeout = %u msec\n", env_syncopTimeout);
+        syncopTimeout = env_syncopTimeout;
+    }
 
     //reset pointers to the all internal resources
     MSDK_ZERO_MEMORY(Resources);
@@ -875,7 +885,7 @@ int sample_vpp_main(int argc, char* argv[]) {
                          (size_t)Params.multiViewParam[paramID].viewCount)) {
                 continue;
             }
-            sts = OutputProcessFrame(Resources, &realFrameInfoOut, nFrames, paramID);
+            sts = OutputProcessFrame(Resources, &realFrameInfoOut, nFrames, paramID, syncopTimeout);
             MSDK_BREAK_ON_ERROR(sts);
 
         } // main while loop
@@ -883,7 +893,7 @@ int sample_vpp_main(int argc, char* argv[]) {
 
         //process remain sync points
         if (MFX_ERR_MORE_DATA == sts) {
-            sts = OutputProcessFrame(Resources, &realFrameInfoOut, nFrames, paramID);
+            sts = OutputProcessFrame(Resources, &realFrameInfoOut, nFrames, paramID, syncopTimeout);
             MSDK_CHECK_STATUS_SAFE(sts, "OutputProcessFrame failed", {
                 WipeResources(&Resources);
                 WipeParams(&Params);
@@ -952,7 +962,7 @@ int sample_vpp_main(int argc, char* argv[]) {
             MSDK_IGNORE_MFX_STS(sts, MFX_ERR_MORE_SURFACE);
             MSDK_BREAK_ON_ERROR(sts);
 
-            sts = Resources.pProcessor->mfxSession.SyncOperation(syncPoint, MSDK_VPP_WAIT_INTERVAL);
+            sts = Resources.pProcessor->mfxSession.SyncOperation(syncPoint, syncopTimeout);
             if (sts)
                 printf("SyncOperation wait interval exceeded\n");
             MSDK_BREAK_ON_ERROR(sts);
