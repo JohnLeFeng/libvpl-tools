@@ -111,7 +111,11 @@ jobs:
       os: ${{ matrix.os }}
       output_prefix: tools-
       dependent_artifact: ${{ matrix.os }}-release-build
-      extra_opts: --report
+      # disable local report generation pending update to new tool
+      #   old method no longer supported
+      #   this may not be necessary to run locally,
+      #     and can collect evidence report from the server instead
+      # extra_opts: --report
 
   linux-tools-build:
     if: true
