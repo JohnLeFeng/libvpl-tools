@@ -5,9 +5,9 @@
   ############################################################################*/
 
 #include "sample_vpp_frc_adv.h"
-#include <cstdint>
 #include <math.h>
 #include <algorithm>
+#include <cstdint>
 #include "vm/strings_defs.h"
 
 #ifndef MFX_VERSION
