@@ -423,11 +423,11 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
     std::vector<mfxU8 *> outbuf(BITSTREAM_BUFFER_SIZE);
     fileInfo->bitstream.MaxLength = static_cast<mfxU32>(outbuf.size());
     fileInfo->bitstream.Data      = reinterpret_cast<mfxU8 *>(outbuf.data());
-    fileInfo->bitstream.CodecId   = MFX_CODEC_HEVC;
+    fileInfo->bitstream.CodecId   = params->codecId;
 
     // init encode parameters
     mfxVideoParam mfxEncParams         = {};
-    mfxEncParams.mfx.CodecId           = MFX_CODEC_HEVC;
+    mfxEncParams.mfx.CodecId           = params->codecId;
     mfxEncParams.mfx.TargetUsage       = MFX_TARGETUSAGE_BALANCED;
     mfxEncParams.mfx.TargetKbps        = 2000;
     mfxEncParams.mfx.RateControlMethod = MFX_RATECONTROL_VBR;
@@ -494,7 +494,21 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
     frameInfo.width     = mfxEncParams.mfx.FrameInfo.Width;
     frameInfo.pitch     = mfxEncParams.mfx.FrameInfo.Width;
 
-    std::cout << "Running: Encode (H265)" << std::endl;
+    // Determine codec name for display
+    const char *codecName = "Unknown";
+    switch (params->codecId) {
+        case MFX_CODEC_AVC:
+            codecName = "AVC/H.264";
+            break;
+        case MFX_CODEC_HEVC:
+            codecName = "HEVC/H.265";
+            break;
+        case MFX_CODEC_AV1:
+            codecName = "AV1";
+            break;
+    }
+
+    std::cout << "Running: Encode (" << codecName << ")" << std::endl;
     std::cout << "  infile  = " << (params->testMode == TEST_MODE_CAPTURE ? "desktop capture" : params->infileName) << std::endl;
     std::cout << "  input colorspace = " << FourCCToString(mfxEncParams.mfx.FrameInfo.FourCC) << std::endl;
     std::cout << "  outfile = " << (params->outfileName.empty() ? "none" : params->outfileName) << std::endl;

@@ -25,6 +25,7 @@ void Usage(void) {
     printf("     -dh [height]   VPP output height (default = %d)\n", DEF_DST_HEIGHT);
     printf("     -nv12          NV12 output (default)\n");
     printf("     -rgb           RGB output (MFX_FOURCC_BGR4)\n");
+    printf("     -enc_codec     encoder codec, options = [h264, h265, av1] (default = h264)\n");
     printf("     -opencl file   enable OpenCL, read program from file (file is required)\n");
     printf("     -timing        print timing info (may modify other options)\n");
     printf("     -mode [mode]   select surface import/export mode, options = [copy, shared]\n");
@@ -67,6 +68,7 @@ bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
     params->outFourCC = MFX_FOURCC_NV12;
     params->dstWidth  = DEF_DST_WIDTH;
     params->dstHeight = DEF_DST_HEIGHT;
+    params->codecId   = MFX_CODEC_AVC; // default codec is AVC
 
     params->bEnableOpenCL = false;
     params->bEnableTiming = false;
@@ -109,6 +111,19 @@ bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
                 params->surfaceMode = SURFACE_MODE_COPY;
             else
                 return false;
+        }
+        else if (IS_ARG_EQ(s, "enc_codec")) {
+            std::string codecStr(argv[idx++]);
+            if (codecStr == "avc" || codecStr == "h264")
+                params->codecId = MFX_CODEC_AVC;
+            else if (codecStr == "hevc" || codecStr == "h265")
+                params->codecId = MFX_CODEC_HEVC;
+            else if (codecStr == "av1")
+                params->codecId = MFX_CODEC_AV1;
+            else {
+                printf("ERROR: unsupported codec '%s' (supported: avc, hevc, av1)\n", codecStr.c_str());
+                return false;
+            }
         }
         else if (IS_ARG_EQ(s, "r")) {
             params->testMode = TEST_MODE_RENDER;
