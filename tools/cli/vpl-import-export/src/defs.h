@@ -34,7 +34,7 @@
 
 #define IS_ARG_EQ(a, b) (!strcmp((a), (b)))
 
-#define ALIGN8(value)           (((value + 7) >> 3) << 3)
+#define ALIGN8(value)            (((value + 7) >> 3) << 3)
 #define ALIGN16(value)           (((value + 15) >> 4) << 4)
 #define ALIGN32(X)               (((mfxU32)((X) + 31)) & (~(mfxU32)31))
 #define VPLVERSION(major, minor) (major << 16 | minor)

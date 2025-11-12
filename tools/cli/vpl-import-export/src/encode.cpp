@@ -448,8 +448,8 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
         mfxEncParams.mfx.FrameInfo.CropW = w;
         mfxEncParams.mfx.FrameInfo.CropH = h;
 
-        if ((encCtx.surfaceFlags == MFX_SURFACE_FLAG_IMPORT_SHARED) && ((w != ALIGN16(w)) || (h != ALIGN16(h)))) {
-            std::cout << "ERROR: desktop resolution " << w << "x" << h << " is not aligned to 16 pixels. SURFACE_MODE_SHARED is not supported. Run again with '-mode copy'"
+        if ((encCtx.surfaceFlags == MFX_SURFACE_FLAG_IMPORT_SHARED) && ((w != ALIGN8(w)) || (h != ALIGN8(h)))) {
+            std::cout << "ERROR: desktop resolution " << w << "x" << h << " is not aligned to 8 pixels. SURFACE_MODE_SHARED is not supported. Run again with '-mode copy'"
                       << std::endl;
             return -1;
         }
@@ -466,8 +466,8 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
     }
 #endif
 
-    mfxEncParams.mfx.FrameInfo.Width  = ALIGN16(mfxEncParams.mfx.FrameInfo.CropW);
-    mfxEncParams.mfx.FrameInfo.Height = ALIGN16(mfxEncParams.mfx.FrameInfo.CropH);
+    mfxEncParams.mfx.FrameInfo.Width  = ALIGN8(mfxEncParams.mfx.FrameInfo.CropW);
+    mfxEncParams.mfx.FrameInfo.Height = ALIGN8(mfxEncParams.mfx.FrameInfo.CropH);
 
     mfxEncParams.IOPattern  = MFX_IOPATTERN_IN_VIDEO_MEMORY;
     mfxEncParams.AsyncDepth = 1;
