@@ -26,6 +26,7 @@ void Usage(void) {
     printf("     -nv12          NV12 output (default)\n");
     printf("     -rgb           RGB output (MFX_FOURCC_BGR4)\n");
     printf("     -enc_codec     encoder codec, options = [h264, h265, av1] (default = h264)\n");
+    printf("     -n [number]    max number of frames to capture (default = %d)\n", MAX_NUM_CAPTURE_FRAMES);
     printf("     -opencl file   enable OpenCL, read program from file (file is required)\n");
     printf("     -timing        print timing info (may modify other options)\n");
     printf("     -mode [mode]   select surface import/export mode, options = [copy, shared]\n");
@@ -65,10 +66,11 @@ bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
     *params = {};
 
     // defaults
-    params->outFourCC = MFX_FOURCC_NV12;
-    params->dstWidth  = DEF_DST_WIDTH;
-    params->dstHeight = DEF_DST_HEIGHT;
-    params->codecId   = MFX_CODEC_AVC; // default codec is AVC
+    params->outFourCC        = MFX_FOURCC_NV12;
+    params->dstWidth         = DEF_DST_WIDTH;
+    params->dstHeight        = DEF_DST_HEIGHT;
+    params->codecId          = MFX_CODEC_AVC; // default codec is AVC
+    params->maxCaptureFrames = MAX_NUM_CAPTURE_FRAMES; // default max capture frames
 
     params->bEnableOpenCL = false;
     params->bEnableTiming = false;
@@ -161,6 +163,18 @@ bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
         }
         else if (IS_ARG_EQ(s, "timing")) {
             params->bEnableTiming = true;
+        }
+        else if (IS_ARG_EQ(s, "n")) {
+            if (argv[idx]) {
+                params->maxCaptureFrames = static_cast<mfxU32>(strtol(argv[idx++], NULL, 10));
+                if (params->maxCaptureFrames == 0) {
+                    printf("ERROR: invalid frames number\n");
+                    return false;
+                }
+            }
+            else {
+                return false;
+            }
         }
         else if (IS_ARG_EQ(s, "dbg")) {
             std::string dbgMask(argv[idx++]);

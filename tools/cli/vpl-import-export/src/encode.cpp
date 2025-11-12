@@ -29,7 +29,8 @@ struct EncodeCtx {
 
     mfxMemoryInterface *memoryInterface = nullptr;
 
-    mfxU32 surfaceFlags = MFX_SURFACE_FLAG_IMPORT_SHARED;
+    mfxU32 surfaceFlags     = MFX_SURFACE_FLAG_IMPORT_SHARED;
+    mfxU32 maxCaptureFrames = MAX_NUM_CAPTURE_FRAMES;
 
     bool bEnableCapture = false;
     bool bEnableOpenCL  = false;
@@ -297,7 +298,7 @@ static int ProcessStreamEncode(mfxSession session, FrameInfo *frameInfo, FileInf
         if (CheckKB_Quit())
             bIsStillGoing = false;
 
-        if (encCtx->bEnableCapture && (framesCaptured >= MAX_NUM_CAPTURE_FRAMES))
+        if (encCtx->bEnableCapture && (framesCaptured >= encCtx->maxCaptureFrames))
             bIsDrainingEnc = true;
     }
 
@@ -346,8 +347,9 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
 #endif
 
     // initialize encode context
-    EncodeCtx encCtx     = {};
-    encCtx.bEnableTiming = params->bEnableTiming;
+    EncodeCtx encCtx        = {};
+    encCtx.bEnableTiming    = params->bEnableTiming;
+    encCtx.maxCaptureFrames = params->maxCaptureFrames;
 
     if (params->surfaceMode == SURFACE_MODE_SHARED)
         encCtx.surfaceFlags = MFX_SURFACE_FLAG_IMPORT_SHARED;

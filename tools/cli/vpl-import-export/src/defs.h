@@ -89,6 +89,7 @@ struct Params {
     mfxU32 surfaceMode;
     mfxU32 dbgMask;
     mfxU32 codecId;
+    mfxU32 maxCaptureFrames;
 
     mfxU16 srcWidth;
     mfxU16 srcHeight;
