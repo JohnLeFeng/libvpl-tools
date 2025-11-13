@@ -44,6 +44,9 @@ struct OpenCLCtxD3D11 {
               m_clkernelUV(),
               m_clqueue(),
 
+              m_pframeInfo(),
+              m_pframeInfoExported(),
+
               m_clBufWritableY(),
               m_clBufWritableUV(),
               m_clBufWritableBGRA(),

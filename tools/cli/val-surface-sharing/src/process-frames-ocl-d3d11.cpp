@@ -444,8 +444,6 @@ mfxStatus OpenCLCtxD3D11::OpenCLInit(mfxHandleType handleType, mfxHDL handle) {
     ID3D11Device *device = reinterpret_cast<ID3D11Device *>(handle);
     cl_int error         = CL_SUCCESS;
 
-    if (!device)
-        return MFX_ERR_DEVICE_FAILED;
     m_pDevice = device;
 
     error = InitPlatform();

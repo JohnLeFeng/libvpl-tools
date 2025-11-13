@@ -49,7 +49,9 @@ mfxStatus CVPPTest::CreateVPLSession() {
 
     // variables used only in 2.x version
     mfxConfig cfg[5] = {};
-    mfxVariant cfgVal;
+
+    mfxVariant cfgVal      = {};
+    cfgVal.Version.Version = MFX_VARIANT_VERSION;
 
     //-- Create m_session
     m_loader = MFXLoad();
@@ -108,7 +110,9 @@ mfxStatus CVPPTest::CreateVPLSession() {
     VERIFY(MFX_ERR_NONE == sts, "ERROR: MFXSetConfigFilterProperty failed for API version", sts);
 
     if (m_pOpts->bTestMultiSession == true) {
-        mfxVariant cfgVal;
+        mfxVariant cfgVal      = {};
+        cfgVal.Version.Version = MFX_VARIANT_VERSION;
+
         mfxConfig cfg   = MFXCreateConfig(m_loader);
         cfgVal.Type     = MFX_VARIANT_TYPE_U32;
         cfgVal.Data.U32 = m_pOpts->adapterToRun;

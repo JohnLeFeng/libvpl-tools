@@ -353,7 +353,9 @@ mfxStatus GetAdaptersInfo(Options *opts, bool bPrint) {
            MFX_ERR_NULL_PTR);
 
     mfxConfig cfg[3] = {};
-    mfxVariant cfgVal;
+
+    mfxVariant cfgVal      = {};
+    cfgVal.Version.Version = MFX_VARIANT_VERSION;
 
     // Implementation used must provide API version 2.10 or newer
     cfg[0]          = MFXCreateConfig(loader);

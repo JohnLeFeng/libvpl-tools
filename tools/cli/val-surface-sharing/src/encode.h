@@ -33,7 +33,6 @@ private:
     int m_tIndex;
     mfxLoader m_loader;
     mfxSession m_session;
-    mfxU32 m_adapterNum;
 
     DevCtx *m_pDevCtx;
 #ifdef TOOLS_ENABLE_OPENCL

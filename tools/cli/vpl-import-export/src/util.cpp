@@ -205,7 +205,9 @@ mfxStatus VPLSession::Open(std::list<SurfaceCaps> *surfaceCapsList) {
 
     // variables used only in 2.x version
     mfxConfig cfg[4];
-    mfxVariant cfgVal;
+
+    mfxVariant cfgVal      = {};
+    cfgVal.Version.Version = MFX_VARIANT_VERSION;
 
     //-- Create session
     m_loader = MFXLoad();

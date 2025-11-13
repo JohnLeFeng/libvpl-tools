@@ -92,19 +92,24 @@ int main(int argc, char **argv) {
             return sts;
     }
 
-    switch (opts.surfaceComponent) {
-        case MFX_SURFACE_COMPONENT_ENCODE:
-            sts = ValSurfaceSharingAPI<CEncodeTest>(opts);
-            break;
-        case MFX_SURFACE_COMPONENT_DECODE:
-            sts = ValSurfaceSharingAPI<CDecodeTest>(opts);
-            break;
-        case MFX_SURFACE_COMPONENT_VPP_INPUT:
-        case MFX_SURFACE_COMPONENT_VPP_OUTPUT:
-            sts = ValSurfaceSharingAPI<CVPPTest>(opts);
-            break;
-        default:
-            break;
+    try {
+        switch (opts.surfaceComponent) {
+            case MFX_SURFACE_COMPONENT_ENCODE:
+                sts = ValSurfaceSharingAPI<CEncodeTest>(opts);
+                break;
+            case MFX_SURFACE_COMPONENT_DECODE:
+                sts = ValSurfaceSharingAPI<CDecodeTest>(opts);
+                break;
+            case MFX_SURFACE_COMPONENT_VPP_INPUT:
+            case MFX_SURFACE_COMPONENT_VPP_OUTPUT:
+                sts = ValSurfaceSharingAPI<CVPPTest>(opts);
+                break;
+            default:
+                break;
+        }
+    }
+    catch (...) {
+        return MFX_ERR_MEMORY_ALLOC;
     }
 
     return sts;
