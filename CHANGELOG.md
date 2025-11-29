@@ -10,6 +10,27 @@ GPUs from the command line.
 
 ## [Unreleased]
 
+### Added
+- New environment variables to override default sync operation
+  timeout in sample_decode and sample_vpp
+- New command-line option in vpl-import-export example to select
+  codec for encode (-e) and screen capture (-c) modes
+- New command-line option in vpl-import-export example to set 
+  maximum number of captured frames
+- New strings in vpl-inspect tool to improve readability of output
+- New logging in sample_vpp when FRC or SR filters are enabled
+
+### Changed
+- Default codec in vpl-import-example for encode and screen capture
+  modes to H.264 (previously H.265)
+- Minimum alignment for screen capture in vpl-import-example to
+  8 pixels (previously 16)
+- Removed bit shift for Y210 output in sample_decode file writer,
+  to align behavior with sample_vpp and sample_multi_transcode
+
+### Fixed
+- Compile error with gcc-15
+
 ## [1.4.0] - 2024-04-11
 
 ### Added
