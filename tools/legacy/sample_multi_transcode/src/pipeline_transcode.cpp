@@ -268,6 +268,8 @@ mfxStatus CTranscodingPipeline::DecodePreInit(sInputParams* pParams) {
         }
     }
     else {
+        MSDK_CHECK_POINTER(m_pParentPipeline, MFX_ERR_NULL_PTR);
+
         m_mfxDecParams         = m_pParentPipeline->GetDecodeParam(TargetID);
         auto mvc               = m_mfxDecParams.AddExtBuffer<mfxExtMVCSeqDesc>();
         *mvc                   = m_pParentPipeline->GetDecMVCSeqDesc();
@@ -294,9 +296,14 @@ mfxStatus CTranscodingPipeline::VPPPreInit(sInputParams* pParams) {
 
     // Obtaining decoder output FourCC - in case of intra-session, just take it from params, in inter-session case, take it from parent session
     // In inter-session case, we'll enable chroma-changing VPP only in encoding session, and only if decoderFourCC!=encoderFourCC
-    mfxU32 decoderFourCC = m_bDecodeEnable
-                               ? m_mfxDecParams.mfx.FrameInfo.FourCC
-                               : m_pParentPipeline->GetDecodeParam().mfx.FrameInfo.FourCC;
+    mfxU32 decoderFourCC = 0;
+    if (m_bDecodeEnable) {
+        decoderFourCC = m_mfxDecParams.mfx.FrameInfo.FourCC;
+    }
+    else {
+        MSDK_CHECK_POINTER(m_pParentPipeline, MFX_ERR_NULL_PTR);
+        decoderFourCC = m_pParentPipeline->GetDecodeParam().mfx.FrameInfo.FourCC;
+    }
 
     if (m_bEncodeEnable || m_bDecodeEnable) {
         if (m_mfxDecParams.mfx.FrameInfo.PicStruct == MFX_PICSTRUCT_FIELD_SINGLE &&

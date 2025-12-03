@@ -2748,6 +2748,7 @@ mfxStatus CH264FrameReader::PrepareNextFrame(mfxBitstream* in, mfxBitstream** ou
         if (sts != MFX_ERR_NONE)
             return sts;
     }
+    MSDK_CHECK_POINTER(m_frame, MFX_ERR_NULL_PTR);
 
     if (m_plainBufferSize < m_frame->DataLength) {
         if (NULL != m_plainBuffer) {
@@ -2761,6 +2762,7 @@ mfxStatus CH264FrameReader::PrepareNextFrame(mfxBitstream* in, mfxBitstream** ou
         m_plainBufferSize = m_frame->DataLength;
     }
 
+    MSDK_CHECK_POINTER(m_plainBuffer, MFX_ERR_NULL_PTR);
     MSDK_MEMCPY_BUF(m_plainBuffer, 0, m_plainBufferSize, m_frame->Data, m_frame->DataLength);
     m_outBS            = {};
     m_outBS.Data       = m_plainBuffer;

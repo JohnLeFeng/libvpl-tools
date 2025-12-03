@@ -289,8 +289,10 @@ void CEncTaskPool::SetGpuHangRecoveryFlag() {
 }
 
 void CEncTaskPool::ClearTasks() {
-    for (size_t i = 0; i < m_nPoolSize; i++) {
-        m_pTasks[i].Reset();
+    if (m_pTasks) {
+        for (size_t i = 0; i < m_nPoolSize; i++) {
+            m_pTasks[i].Reset();
+        }
     }
     m_nTaskBufferStart = 0;
 }
@@ -2276,7 +2278,8 @@ mfxStatus CEncodingPipeline::ConfigTCBRCTest(mfxFrameSurface1* pSurf) {
                                 (m_mfxEncParams.mfx.FrameInfo.FrameRateExtD * 1000);
             if (m_mfxEncParams.mfx.TargetKbps != newBitrate) {
                 m_mfxEncParams.mfx.TargetKbps = (mfxU16)newBitrate;
-                sts                           = m_pmfxENC->Reset(&m_mfxEncParams);
+                MSDK_CHECK_POINTER(m_pmfxENC, MFX_ERR_NOT_INITIALIZED);
+                sts = m_pmfxENC->Reset(&m_mfxEncParams);
             }
         }
     }

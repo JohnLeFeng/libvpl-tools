@@ -240,7 +240,7 @@ mfxStatus CVAAPIDeviceX11::RenderFrame(mfxFrameSurface1* pSurface,
         size   = PAGE_ALIGN(stride * height);
 
         fd = dup(memId->m_buffer_info.handle);
-        if (!fd) {
+        if (fd < 0) {
             printf("Invalid fd\n");
             return MFX_ERR_NOT_INITIALIZED;
         }

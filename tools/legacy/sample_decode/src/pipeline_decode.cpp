@@ -1449,7 +1449,11 @@ mfxStatus CDecodingPipeline::CreateAllocator() {
         if (m_eWorkMode == MODE_RENDERING) {
             if (m_libvaBackend == MFX_LIBVA_DRM_MODESET) {
     #if defined(LIBVA_DRM_SUPPORT)
-                CVAAPIDeviceDRM* drmdev           = dynamic_cast<CVAAPIDeviceDRM*>(m_hwdev);
+                CVAAPIDeviceDRM* drmdev = dynamic_cast<CVAAPIDeviceDRM*>(m_hwdev);
+                if (!drmdev) {
+                    MSDK_SAFE_DELETE(p_vaapiAllocParams);
+                    MSDK_CHECK_STATUS(MFX_ERR_DEVICE_FAILED, "Failed to reach DRM VAAPI device");
+                }
                 p_vaapiAllocParams->m_export_mode = vaapiAllocatorParams::PRIME;
                 p_vaapiAllocParams->m_exporter =
                     dynamic_cast<vaapiAllocatorParams::Exporter*>(drmdev->getRenderer());

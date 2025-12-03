@@ -293,7 +293,11 @@ mfxStatus Config3dlut(sInputParams* pParams, sAppResources* pResources) {
         if (!file)
             return MFX_ERR_NULL_PTR;
         fseek(file, 0, SEEK_END);
-        mfxU32 lutTblSize = ftell(file);
+        mfxI32 lutTblSize = ftell(file);
+        if (lutTblSize < 0) {
+            fclose(file);
+            return MFX_ERR_INVALID_VIDEO_PARAM;
+        }
         rewind(file);
 
         pParams->lutTbl.resize(lutTblSize);
