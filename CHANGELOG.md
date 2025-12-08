@@ -8,7 +8,7 @@ Intel® Video Processing Library (Intel® VPL) tools provide access to hardware
 accelerated video decode, encode, and frame processing capabilities on Intel®
 GPUs from the command line.
 
-## [Unreleased]
+## [1.5.0] - 2025-12-08
 
 ### Added
 - New environment variables to override default sync operation
@@ -83,9 +83,10 @@ GPUs from the command line.
   (https://github.com/intel/libvpl)
 
 
-[Unreleased]: https://github.com/intel/libvpl/compare/v1.4.0...HEAD
-[1.4.0]: https://github.com/intel/libvpl/compare/v1.3.0...v1.4.0
-[1.3.0]: https://github.com/intel/libvpl/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/intel/libvpl/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/intel/libvpl/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/intel/libvpl/releases/tag/v1.0.0
+[Unreleased]: https://github.com/intel/libvpl-tools/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/intel/libvpl-tools/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/intel/libvpl-tools/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/intel/libvpl-tools/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/intel/libvpl-tools/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/intel/libvpl-tools/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/intel/libvpl-tools/releases/tag/v1.0.0
