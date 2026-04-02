@@ -272,6 +272,9 @@ void vppPrintHelp(const char* strAppName, const char* strErrorMessage) {
         "   [-gamut:bt709]        - enable BT.709 matrix transform (RGB->YUV conversion)(def: BT.601)\n\n");
     printf("   [-frc:advanced]       - enable advanced FRC algorithm (based on PTS) \n");
     printf("   [-frc:interp]         - enable FRC based on frame interpolation algorithm\n\n");
+#ifdef ONEVPL_EXPERIMENTAL
+    printf("   [-frc:ai_interp]      - enable AI based FRC algorithm\n\n");
+#endif
 
     printf("   [-tcc:red]            - enable color saturation algorithm (R component) \n");
     printf("   [-tcc:green]          - enable color saturation algorithm (G component)\n");
