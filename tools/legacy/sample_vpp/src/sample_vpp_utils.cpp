@@ -217,10 +217,18 @@ void PrintStreamInfo(sInputParams* pParams,
     //printf("FRC:Advanced\t%s\n",   (VPP_FILTER_DISABLED != pParams->frcParam.mode)  ? "ON": "OFF");
 #ifdef ONEVPL_EXPERIMENTAL
     if (VPP_FILTER_ENABLED_CONFIGURED == pParams->srParam[0].mode) {
-        printf("SR:AI-Default\tON\n");
+        if (MFX_AI_SUPER_RESOLUTION_ALGORITHM_DEFAULT == pParams->srParam[0].algorithm) {
+            printf("SR:AI-Default\tON\n");
+        }
+        else if (MFX_AI_SUPER_RESOLUTION_ALGORITHM_1 == pParams->srParam[0].algorithm) {
+            printf("SR:AI-Algo-1\tON\n");
+        }
+        else if (MFX_AI_SUPER_RESOLUTION_ALGORITHM_2 == pParams->srParam[0].algorithm) {
+            printf("SR:AI-Algo-2\tON\n");
+        }
     }
     else {
-        printf("SR:AI-Default\tOFF\n");
+        printf("SR:AI\t\tOFF\n");
     }
 #endif
     // MSDK 3.0

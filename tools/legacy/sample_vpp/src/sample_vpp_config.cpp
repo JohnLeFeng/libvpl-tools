@@ -107,6 +107,8 @@ mfxStatus ConfigVideoEnhancementFilters(sInputParams* pParams,
     if (VPP_FILTER_ENABLED_CONFIGURED == pParams->srParam[paramID].mode) {
         auto srConfig    = pVppParam->AddExtBuffer<mfxExtVPPAISuperResolution>();
         srConfig->SRMode = MFX_AI_SUPER_RESOLUTION_MODE_DEFAULT;
+        srConfig->SRAlgorithm =
+            static_cast<mfxAISuperResolutionAlgorithm>(pParams->srParam[paramID].algorithm);
     }
 #endif
     if (VPP_FILTER_ENABLED_CONFIGURED == pParams->colorfillParam[paramID].mode) {

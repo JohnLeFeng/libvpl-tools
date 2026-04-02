@@ -298,7 +298,11 @@ void vppPrintHelp(const char* strAppName, const char* strErrorMessage) {
     printf("   [-ssinr (id)]         - specify YUV nominal range for input surface.\n");
     printf("   [-dsinr (id)]         - specify YUV nominal range for output surface.\n\n");
     printf("   [-mirror (mode)]      - mirror image using specified mode.\n");
-    printf("   [-sr]                 - enable AI based super resolution.\n");
+    printf("   [-sr (algorithm)]     - enable AI based super resolution.\n");
+    printf("                           algorithm - algorithm of AI based super resolution\n");
+    printf("                                  0 - most appropriate sr algorithm for current hardware (default)\n");
+    printf("                                  1 - sr algorithm1\n");
+    printf("                                  2 - sr algorithm2 (expected to be better than algorithm1)\n");
 
     printf("   [-n frames] - number of frames to VPP process\n\n");
 
@@ -1123,9 +1127,25 @@ mfxStatus vppParseInputString(char* strInput[],
                 msdk_opt_read(strInput[i], pParams->mirroringParam[0].Type);
             }
             else if (msdk_match(strInput[i], "-sr")) {
-                VAL_CHECK(1 + i == nArgNum);
-
                 pParams->srParam[0].mode = VPP_FILTER_ENABLED_CONFIGURED;
+
+                if (i + 1 < nArgNum) {
+                    if (MFX_ERR_NONE != msdk_opt_read(strInput[i + 1], readData)) {
+                        pParams->srParam[0].algorithm = 0; // default SR algorithm
+                    }
+                    else {
+                        pParams->srParam[0].algorithm = (mfxU32)readData;
+                        pParams->srParam[0].mode      = VPP_FILTER_ENABLED_CONFIGURED;
+                        i++;
+
+                        if (pParams->srParam[0].algorithm != 0 &&
+                            pParams->srParam[0].algorithm != 1 &&
+                            pParams->srParam[0].algorithm != 2) {
+                            vppPrintHelp(strInput[0], "Invalid SR configuration");
+                            return MFX_ERR_UNSUPPORTED;
+                        }
+                    }
+                }
             }
             else if (msdk_match(strInput[i], "-sw")) {
                 VAL_CHECK(1 + i == nArgNum);
