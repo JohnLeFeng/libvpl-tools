@@ -32,6 +32,8 @@
 
 #include "preset_manager.h"
 
+#include "mp4_writer.h"
+
 #if defined(ENABLE_V4L2_SUPPORT)
     #include "v4l2_util.h"
 #endif
@@ -276,6 +278,8 @@ struct sInputParams {
     bool bReadByFrame;
     std::string m_encode_cfg;
     std::string m_vpp_cfg;
+
+    bool bEnableMp4; // enable MP4 container output
 };
 
 struct sTask {

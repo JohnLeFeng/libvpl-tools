@@ -313,6 +313,8 @@ void PrintHelp(char* strAppName, const char* strErrorMessage, ...) {
     printf(
         "   [-api_ver_init::<1x,2x>]  - select the api version for the session initialization\n");
     printf("   [-rbf] - read frame-by-frame from the input (sw lib only)\n");
+    printf(
+        "   [-mp4] - wrap output in MP4 container (supported for H.264, H.265, AV1 codecs)\n");
 
 #if D3D_SURFACES_SUPPORT
     printf("   [-d3d] - work with d3d surfaces\n");
@@ -686,6 +688,9 @@ mfxStatus ParseAdditionalParams(char* strInput[],
     else if (msdk_match(strInput[i], "-rbf")) {
         pParams->bReadByFrame = true;
     }
+    else if (msdk_match(strInput[i], "-mp4")) {
+        pParams->bEnableMp4 = true;
+    }
     else if (msdk_match(strInput[i], "-pci")) {
         char deviceInfo[MSDK_MAX_FILENAME_LEN];
         VAL_CHECK(i + 1 >= nArgNum, i, strInput[i]);
@@ -793,6 +798,7 @@ mfxStatus ParseInputString(char* strInput[], mfxU32 nArgNum, sInputParams* pPara
     pParams->dGfxIdx            = -1;
     pParams->adapterNum         = -1;
     pParams->dispFullSearch     = DEF_DISP_FULLSEARCH;
+    pParams->bEnableMp4         = false;
     pParams->RoundingOffsetFile = NULL;
 #if defined(ENABLE_V4L2_SUPPORT)
     pParams->MipiPort   = -1;
@@ -1608,6 +1614,12 @@ mfxStatus ParseInputString(char* strInput[], mfxU32 nArgNum, sInputParams* pPara
             pParams->EncodeFourCC = MFX_FOURCC_NV12;
         else
             pParams->EncodeFourCC = pParams->FileInputFourCC;
+    }
+
+    if (pParams->bEnableMp4 && pParams->CodecId != MFX_CODEC_AVC &&
+        pParams->CodecId != MFX_CODEC_HEVC && pParams->CodecId != MFX_CODEC_AV1) {
+        PrintHelp(strInput[0], "-mp4 option is only supported for H.264, H.265, and AV1 codecs");
+        return MFX_ERR_UNSUPPORTED;
     }
 
     if (MFX_CODEC_JPEG != pParams->CodecId && MFX_CODEC_HEVC != pParams->CodecId &&

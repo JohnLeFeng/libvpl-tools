@@ -139,6 +139,7 @@ target_sources(
           src/decode_render.cpp
           src/general_allocator.cpp
           src/mfx_buffering.cpp
+          src/mp4_writer.cpp
           src/parameters_dumper.cpp
           src/plugin_utils.cpp
           src/preset_manager.cpp

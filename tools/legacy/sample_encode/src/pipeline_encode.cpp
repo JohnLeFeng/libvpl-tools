@@ -1486,8 +1486,22 @@ mfxStatus CEncodingPipeline::InitFileWriters(sInputParams* pParams) {
     }
     // not ViewOutput mode
     else {
-        sts = InitFileWriter(&m_FileWriters.first, pParams->dstFileBuff[0], m_bNoOutFile);
-        MSDK_CHECK_STATUS(sts, "File writer initialization failed");
+        if (pParams->bEnableMp4) {
+            MSDK_SAFE_DELETE(m_FileWriters.first);
+            auto* mp4Writer = new CSmplBitstreamMp4Writer;
+            MSDK_CHECK_POINTER(mp4Writer, MFX_ERR_MEMORY_ALLOC);
+            sts = mp4Writer->InitMp4(pParams->dstFileBuff[0],
+                                     pParams->CodecId,
+                                     pParams->nDstWidth,
+                                     pParams->nDstHeight,
+                                     pParams->dFrameRate);
+            MSDK_CHECK_STATUS(sts, "MP4 writer initialization failed");
+            m_FileWriters.first = mp4Writer;
+        }
+        else {
+            sts = InitFileWriter(&m_FileWriters.first, pParams->dstFileBuff[0], m_bNoOutFile);
+            MSDK_CHECK_STATUS(sts, "File writer initialization failed");
+        }
     }
 
     return sts;
