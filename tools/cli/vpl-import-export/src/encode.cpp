@@ -392,7 +392,9 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
 
     // initialize session
     VPLSession vplSession = {};
+    VPL_BASIC_TIME_START(initSession, "Intel VPL Session Initialization");
     sts                   = vplSession.Open(&surfaceCapsList);
+    VPL_BASIC_TIME_END(initSession);
     VERIFY(MFX_ERR_NONE == sts, "ERROR: unable to create session");
 
     // pass device handle to runtime
