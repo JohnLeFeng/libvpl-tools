@@ -96,13 +96,19 @@ struct Params {
     mfxU16 srcHeight;
     mfxU16 dstWidth;
     mfxU16 dstHeight;
+    mfxU16 srcCropX;
+    mfxU16 srcCropY;
+    mfxU16 srcCropW;
+    mfxU16 srcCropH;
 
     bool bEnableOpenCL;
     bool bEnableTiming;
     bool bEnableSuperResolution;
+    bool bEnableInputCrop;
     bool bDstWidthExplicit;
     bool bDstHeightExplicit;
     bool bSurfaceModeExplicit;
+    mfxU8 inputCropMask;
 };
 
 struct FrameInfo {

@@ -54,6 +54,14 @@ bool ValidateSuperResolutionDimensions(mfxU16 srcWidth,
 									   mfxU16 srcHeight,
 									   mfxU16 dstWidth,
 									   mfxU16 dstHeight);
+bool ValidateSuperResolutionCrop(mfxU16 frameWidth,
+								 mfxU16 frameHeight,
+								 mfxU16 cropX,
+								 mfxU16 cropY,
+								 mfxU16 cropWidth,
+								 mfxU16 cropHeight,
+								 mfxU16 dstWidth,
+								 mfxU16 dstHeight);
 const char *FourCCToString(mfxU32 fourCC);
 mfxStatus CreateVPLSession(VPLSession &vplSession);
 mfxStatus ReadEncodedStream(mfxBitstream &bs, std::ifstream &f);

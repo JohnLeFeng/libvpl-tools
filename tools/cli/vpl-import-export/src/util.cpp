@@ -31,6 +31,10 @@ void Usage(void) {
     printf("     -n [number]    max number of frames to capture (default = %d)\n", MAX_NUM_CAPTURE_FRAMES);
     printf("     -opencl file   enable OpenCL, read program from file (file is required)\n");
     printf("     -sr [0|1|2]    enable AI super resolution during desktop capture\n");
+    printf("     -scrX [x]      source crop X for super resolution\n");
+    printf("     -scrY [y]      source crop Y for super resolution\n");
+    printf("     -scrW [width]  source crop width for super resolution\n");
+    printf("     -scrH [height] source crop height for super resolution\n");
     printf("     -timing        print timing info (may modify other options)\n");
     printf("     -mode [mode]   select surface import/export mode, options = [copy, shared]\n");
     printf("     -dbg [mask]    enable debugging options according to bitmask in mask\n");
@@ -59,6 +63,22 @@ static bool ValidateSize(char *in, mfxU16 *vsize, mfxU32 vmax) {
 
     *vsize = 0;
     return false;
+}
+
+static bool ValidateCropValue(char *in, mfxU16 *value, bool allowZero) {
+    if (!in)
+        return false;
+
+    char *end = nullptr;
+    errno = 0;
+    long parsed = strtol(in, &end, 10);
+    if (errno == ERANGE || !end || *end != '\0' || parsed < (allowZero ? 0 : 1) ||
+        parsed > MAX_WIDTH) {
+        return false;
+    }
+
+    *value = static_cast<mfxU16>(parsed);
+    return true;
 }
 
 bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
@@ -178,6 +198,26 @@ bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
                 return false;
             params->bDstHeightExplicit = true;
         }
+        else if (IS_ARG_EQ(s, "scrX")) {
+            if (idx >= argc || !ValidateCropValue(argv[idx++], &params->srcCropX, true))
+                return false;
+            params->inputCropMask |= 0x01;
+        }
+        else if (IS_ARG_EQ(s, "scrY")) {
+            if (idx >= argc || !ValidateCropValue(argv[idx++], &params->srcCropY, true))
+                return false;
+            params->inputCropMask |= 0x02;
+        }
+        else if (IS_ARG_EQ(s, "scrW")) {
+            if (idx >= argc || !ValidateCropValue(argv[idx++], &params->srcCropW, false))
+                return false;
+            params->inputCropMask |= 0x04;
+        }
+        else if (IS_ARG_EQ(s, "scrH")) {
+            if (idx >= argc || !ValidateCropValue(argv[idx++], &params->srcCropH, false))
+                return false;
+            params->inputCropMask |= 0x08;
+        }
         else if (IS_ARG_EQ(s, "nv12")) {
             params->outFourCC = MFX_FOURCC_NV12;
         }
@@ -254,6 +294,23 @@ bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
         }
     }
 
+    if (params->inputCropMask) {
+        if (params->inputCropMask != 0x0F) {
+            printf("ERROR: -scrX, -scrY, -scrW, and -scrH must be specified together\n");
+            return false;
+        }
+        if (!params->bEnableSuperResolution) {
+            printf("ERROR: input crop options require super resolution (-sr)\n");
+            return false;
+        }
+        if ((params->srcCropX & 1) || (params->srcCropY & 1) ||
+            (params->srcCropW & 1) || (params->srcCropH & 1)) {
+            printf("ERROR: input crop values must be even\n");
+            return false;
+        }
+        params->bEnableInputCrop = true;
+    }
+
     return true;
 }
 
@@ -269,6 +326,28 @@ bool ValidateSuperResolutionDimensions(mfxU16 srcWidth,
 
     return static_cast<mfxU32>(srcWidth) * dstHeight ==
            static_cast<mfxU32>(srcHeight) * dstWidth;
+}
+
+bool ValidateSuperResolutionCrop(mfxU16 frameWidth,
+                                 mfxU16 frameHeight,
+                                 mfxU16 cropX,
+                                 mfxU16 cropY,
+                                 mfxU16 cropWidth,
+                                 mfxU16 cropHeight,
+                                 mfxU16 dstWidth,
+                                 mfxU16 dstHeight) {
+    if (!frameWidth || !frameHeight || !cropWidth || !cropHeight || !dstWidth || !dstHeight)
+        return false;
+
+    if ((cropX & 1) || (cropY & 1) || (cropWidth & 1) || (cropHeight & 1))
+        return false;
+
+    if (static_cast<mfxU32>(cropX) + cropWidth > frameWidth ||
+        static_cast<mfxU32>(cropY) + cropHeight > frameHeight) {
+        return false;
+    }
+
+    return dstWidth > cropWidth && dstHeight > cropHeight;
 }
 
 const char *FourCCToString(mfxU32 fourCC) {

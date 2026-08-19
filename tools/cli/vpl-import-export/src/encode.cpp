@@ -89,11 +89,20 @@ static int ProcessStreamCaptureSuperResolution(mfxSession session,
         mfxStatus sts = cc->CaptureFrame(pTex2D);
         VERIFY(sts == MFX_ERR_NONE, "ERROR: CaptureFrame");
 
+        CComPtr<ID3D11Texture2D> pNV12Tex2D;
+        sts = cc->ConvertFrameToNV12(pTex2D, pNV12Tex2D);
+        if (sts != MFX_ERR_NONE) {
+            cc->ReleaseFrame();
+            std::cout << "ERROR: converting captured RGB4 surface to NV12, status " << sts
+                      << std::endl;
+            return -1;
+        }
+
         mfxSurfaceD3D11Tex2D extSurfD3D11 = {};
         extSurfD3D11.SurfaceInterface.Header.SurfaceType = MFX_SURFACE_TYPE_D3D11_TEX2D;
         extSurfD3D11.SurfaceInterface.Header.SurfaceFlags = encCtx->surfaceFlags;
         extSurfD3D11.SurfaceInterface.Header.StructSize = sizeof(mfxSurfaceD3D11Tex2D);
-        extSurfD3D11.texture2D = pTex2D;
+        extSurfD3D11.texture2D = pNV12Tex2D;
         extSurface = reinterpret_cast<mfxSurfaceHeader *>(&extSurfD3D11);
 #else
         VASurfaceID vaSurfaceID = VA_INVALID_SURFACE;
@@ -656,23 +665,43 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
         }
 
         if (params->bEnableSuperResolution) {
-            if (!ValidateSuperResolutionDimensions(w, h, params->dstWidth, params->dstHeight)) {
-                std::cout << "ERROR: super resolution destination " << params->dstWidth << "x"
-                          << params->dstHeight << " must be larger than desktop resolution " << w
-                          << "x" << h << " and preserve its aspect ratio" << std::endl;
-                return -1;
+            if (params->bEnableInputCrop) {
+                if (!ValidateSuperResolutionCrop(w,
+                                                 h,
+                                                 params->srcCropX,
+                                                 params->srcCropY,
+                                                 params->srcCropW,
+                                                 params->srcCropH,
+                                                 params->dstWidth,
+                                                 params->dstHeight)) {
+                    std::cout << "ERROR: input crop must fit within desktop resolution " << w
+                              << "x" << h << " and destination " << params->dstWidth << "x"
+                              << params->dstHeight << " must be larger than the crop" << std::endl;
+                    return -1;
+                }
+            }
+            else if (!ValidateSuperResolutionDimensions(w,
+                                                        h,
+                                                        params->dstWidth,
+                                                        params->dstHeight)) {
+                    std::cout << "ERROR: super resolution destination " << params->dstWidth << "x"
+                              << params->dstHeight << " must be larger than desktop resolution " << w
+                              << "x" << h << " and preserve its aspect ratio" << std::endl;
+                    return -1;
             }
 
-            mfxVPPParams.vpp.In.CropW         = w;
-            mfxVPPParams.vpp.In.CropH         = h;
+            mfxVPPParams.vpp.In.CropX         = params->bEnableInputCrop ? params->srcCropX : 0;
+            mfxVPPParams.vpp.In.CropY         = params->bEnableInputCrop ? params->srcCropY : 0;
+            mfxVPPParams.vpp.In.CropW         = params->bEnableInputCrop ? params->srcCropW : w;
+            mfxVPPParams.vpp.In.CropH         = params->bEnableInputCrop ? params->srcCropH : h;
             mfxVPPParams.vpp.In.Width         = ALIGN8(w);
             mfxVPPParams.vpp.In.Height        = ALIGN8(h);
             mfxVPPParams.vpp.In.PicStruct     = MFX_PICSTRUCT_PROGRESSIVE;
             mfxVPPParams.vpp.In.FrameRateExtN = 30;
             mfxVPPParams.vpp.In.FrameRateExtD = 1;
 #ifdef _WIN32
-            mfxVPPParams.vpp.In.FourCC       = MFX_FOURCC_RGB4;
-            mfxVPPParams.vpp.In.ChromaFormat = MFX_CHROMAFORMAT_YUV444;
+            mfxVPPParams.vpp.In.FourCC       = MFX_FOURCC_NV12;
+            mfxVPPParams.vpp.In.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
 #else
             mfxVPPParams.vpp.In.FourCC       = MFX_FOURCC_NV12;
             mfxVPPParams.vpp.In.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
@@ -725,8 +754,16 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
     mfxEncParams.AsyncDepth = 1;
 
     if (params->bEnableSuperResolution) {
-        sts = MFXVideoVPP_Query(vplSession.GetSession(), &mfxVPPParams, &mfxVPPParams);
-        VERIFY(MFX_ERR_NONE == sts, "ERROR: AI super resolution is not supported");
+        mfxVideoParam queriedVPPParams = {};
+        queriedVPPParams.ExtParam      = mfxVPPParams.ExtParam;
+        queriedVPPParams.NumExtParam   = mfxVPPParams.NumExtParam;
+        sts = MFXVideoVPP_Query(
+            vplSession.GetSession(), &mfxVPPParams, &queriedVPPParams);
+        if (sts != MFX_ERR_NONE) {
+            std::cout << "ERROR: querying AI super resolution VPP, status " << sts << std::endl;
+            return -1;
+        }
+        mfxVPPParams = queriedVPPParams;
 
         sts = MFXVideoVPP_Init(vplSession.GetSession(), &mfxVPPParams);
         VERIFY(MFX_ERR_NONE == sts, "ERROR: initializing AI super resolution VPP");
@@ -778,6 +815,10 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
         std::cout << "  AI super resolution algorithm = " << params->srAlgorithm << std::endl;
         std::cout << "  VPP input import mode = "
                   << DebugGetStringSurfaceFlags(encCtx.surfaceFlags) << std::endl;
+        if (params->bEnableInputCrop) {
+            std::cout << "  VPP input crop = " << params->srcCropX << "," << params->srcCropY
+                      << "," << params->srcCropW << "," << params->srcCropH << std::endl;
+        }
     }
     std::cout << std::endl << std::endl;
 

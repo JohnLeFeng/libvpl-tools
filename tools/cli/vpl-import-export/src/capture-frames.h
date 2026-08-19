@@ -22,7 +22,16 @@
 
 #if defined(_WIN32) || defined(_WIN64)
 struct CaptureCtxD3D11 {
-    CaptureCtxD3D11() : m_devCtx(), m_pD3D11Device(), m_DXGIOutduplDesc(), m_pDXGIOutputDupl() {}
+        CaptureCtxD3D11()
+                        : m_devCtx(),
+                            m_pD3D11Device(),
+                            m_DXGIOutduplDesc(),
+                            m_pDXGIOutputDupl(),
+                            m_pVideoDevice(),
+                            m_pVideoContext(),
+                            m_pVideoProcessorEnum(),
+                            m_pVideoProcessor(),
+                            m_pNV12Texture() {}
 
     ~CaptureCtxD3D11() {}
 
@@ -37,6 +46,7 @@ struct CaptureCtxD3D11 {
 
     mfxStatus CaptureInit(DevCtx *devCtx);
     mfxStatus CaptureFrame(CComPtr<ID3D11Texture2D> &pTex2D);
+    mfxStatus ConvertFrameToNV12(ID3D11Texture2D *pSrc, CComPtr<ID3D11Texture2D> &pDst);
     mfxStatus ReleaseFrame(void);
 
 private:
@@ -44,6 +54,11 @@ private:
     ID3D11Device *m_pD3D11Device; // plain pointer, copy of device handle
     DXGI_OUTDUPL_DESC m_DXGIOutduplDesc;
     CComPtr<IDXGIOutputDuplication> m_pDXGIOutputDupl;
+    CComPtr<ID3D11VideoDevice> m_pVideoDevice;
+    CComPtr<ID3D11VideoContext> m_pVideoContext;
+    CComPtr<ID3D11VideoProcessorEnumerator> m_pVideoProcessorEnum;
+    CComPtr<ID3D11VideoProcessor> m_pVideoProcessor;
+    CComPtr<ID3D11Texture2D> m_pNV12Texture;
 };
 #else
 struct CaptureCtxVAAPI {
