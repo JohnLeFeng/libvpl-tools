@@ -62,6 +62,22 @@ bool ValidateSuperResolutionCrop(mfxU16 frameWidth,
 								 mfxU16 cropHeight,
 								 mfxU16 dstWidth,
 								 mfxU16 dstHeight);
+struct SuperResolutionInputGeometry {
+	mfxU16 sourceX;
+	mfxU16 sourceY;
+	mfxU16 activeWidth;
+	mfxU16 activeHeight;
+	mfxU16 surfaceWidth;
+	mfxU16 surfaceHeight;
+};
+bool GetSuperResolutionInputGeometry(mfxU16 frameWidth,
+									 mfxU16 frameHeight,
+									 bool enableCrop,
+									 mfxU16 cropX,
+									 mfxU16 cropY,
+									 mfxU16 cropWidth,
+									 mfxU16 cropHeight,
+									 SuperResolutionInputGeometry *geometry);
 const char *FourCCToString(mfxU32 fourCC);
 mfxStatus CreateVPLSession(VPLSession &vplSession);
 mfxStatus ReadEncodedStream(mfxBitstream &bs, std::ifstream &f);

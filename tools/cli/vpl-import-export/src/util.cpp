@@ -350,6 +350,37 @@ bool ValidateSuperResolutionCrop(mfxU16 frameWidth,
     return dstWidth > cropWidth && dstHeight > cropHeight;
 }
 
+bool GetSuperResolutionInputGeometry(mfxU16 frameWidth,
+                                     mfxU16 frameHeight,
+                                     bool enableCrop,
+                                     mfxU16 cropX,
+                                     mfxU16 cropY,
+                                     mfxU16 cropWidth,
+                                     mfxU16 cropHeight,
+                                     SuperResolutionInputGeometry *geometry) {
+    if (!geometry || !frameWidth || !frameHeight)
+        return false;
+
+    const mfxU16 sourceX      = enableCrop ? cropX : 0;
+    const mfxU16 sourceY      = enableCrop ? cropY : 0;
+    const mfxU16 activeWidth  = enableCrop ? cropWidth : frameWidth;
+    const mfxU16 activeHeight = enableCrop ? cropHeight : frameHeight;
+
+    if (!activeWidth || !activeHeight ||
+        static_cast<mfxU32>(sourceX) + activeWidth > frameWidth ||
+        static_cast<mfxU32>(sourceY) + activeHeight > frameHeight) {
+        return false;
+    }
+
+    geometry->sourceX       = sourceX;
+    geometry->sourceY       = sourceY;
+    geometry->activeWidth   = activeWidth;
+    geometry->activeHeight  = activeHeight;
+    geometry->surfaceWidth  = ALIGN16(activeWidth);
+    geometry->surfaceHeight = ALIGN16(activeHeight);
+    return true;
+}
+
 const char *FourCCToString(mfxU32 fourCC) {
     switch (fourCC) {
         case MFX_FOURCC_NV12:

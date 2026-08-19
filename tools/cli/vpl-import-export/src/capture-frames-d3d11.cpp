@@ -5,6 +5,7 @@
 //==============================================================================
 
 #include "./capture-frames.h"
+#include "./util.h"
 
 mfxStatus CaptureCtxD3D11::CaptureInit(DevCtx *devCtx) {
     m_devCtx       = devCtx;
@@ -45,8 +46,28 @@ mfxStatus CaptureCtxD3D11::CaptureInit(DevCtx *devCtx) {
 
     m_pDXGIOutputDupl->GetDesc(&m_DXGIOutduplDesc);
 
-    hres = m_pD3D11Device->QueryInterface(__uuidof(ID3D11VideoDevice),
-                                          reinterpret_cast<void **>(&m_pVideoDevice));
+    return MFX_ERR_NONE;
+}
+
+mfxStatus CaptureCtxD3D11::ConfigureNV12Output(bool enableCrop,
+                                               mfxU16 cropX,
+                                               mfxU16 cropY,
+                                               mfxU16 cropWidth,
+                                               mfxU16 cropHeight) {
+    SuperResolutionInputGeometry geometry = {};
+    if (!GetSuperResolutionInputGeometry(m_DXGIOutduplDesc.ModeDesc.Width,
+                                         m_DXGIOutduplDesc.ModeDesc.Height,
+                                         enableCrop,
+                                         cropX,
+                                         cropY,
+                                         cropWidth,
+                                         cropHeight,
+                                         &geometry)) {
+        return MFX_ERR_INVALID_VIDEO_PARAM;
+    }
+
+    HRESULT hres = m_pD3D11Device->QueryInterface(__uuidof(ID3D11VideoDevice),
+                                                  reinterpret_cast<void **>(&m_pVideoDevice));
     if (FAILED(hres))
         return MFX_ERR_DEVICE_FAILED;
 
@@ -65,8 +86,8 @@ mfxStatus CaptureCtxD3D11::CaptureInit(DevCtx *devCtx) {
     contentDesc.InputHeight                        = m_DXGIOutduplDesc.ModeDesc.Height;
     contentDesc.OutputFrameRate.Numerator          = 30;
     contentDesc.OutputFrameRate.Denominator        = 1;
-    contentDesc.OutputWidth                        = m_DXGIOutduplDesc.ModeDesc.Width;
-    contentDesc.OutputHeight                       = m_DXGIOutduplDesc.ModeDesc.Height;
+    contentDesc.OutputWidth                        = geometry.surfaceWidth;
+    contentDesc.OutputHeight                       = geometry.surfaceHeight;
     contentDesc.Usage                              = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
 
     hres = m_pVideoDevice->CreateVideoProcessorEnumerator(&contentDesc,
@@ -79,8 +100,8 @@ mfxStatus CaptureCtxD3D11::CaptureInit(DevCtx *devCtx) {
         return MFX_ERR_DEVICE_FAILED;
 
     D3D11_TEXTURE2D_DESC textureDesc = {};
-    textureDesc.Width                = m_DXGIOutduplDesc.ModeDesc.Width;
-    textureDesc.Height               = m_DXGIOutduplDesc.ModeDesc.Height;
+    textureDesc.Width                = geometry.surfaceWidth;
+    textureDesc.Height               = geometry.surfaceHeight;
     textureDesc.MipLevels            = 1;
     textureDesc.ArraySize            = 1;
     textureDesc.Format               = DXGI_FORMAT_NV12;
@@ -92,6 +113,11 @@ mfxStatus CaptureCtxD3D11::CaptureInit(DevCtx *devCtx) {
     hres = m_pD3D11Device->CreateTexture2D(&textureDesc, nullptr, &m_pNV12Texture);
     if (FAILED(hres))
         return MFX_ERR_DEVICE_FAILED;
+
+    m_sourceX      = geometry.sourceX;
+    m_sourceY      = geometry.sourceY;
+    m_activeWidth  = geometry.activeWidth;
+    m_activeHeight = geometry.activeHeight;
 
     return MFX_ERR_NONE;
 }
@@ -145,15 +171,22 @@ mfxStatus CaptureCtxD3D11::ConvertFrameToNV12(ID3D11Texture2D *pSrc,
     if (FAILED(hres))
         return MFX_ERR_DEVICE_FAILED;
 
-    RECT rect = { 0,
-                  0,
-                  static_cast<LONG>(m_DXGIOutduplDesc.ModeDesc.Width),
-                  static_cast<LONG>(m_DXGIOutduplDesc.ModeDesc.Height) };
+    RECT sourceRect = { static_cast<LONG>(m_sourceX),
+                        static_cast<LONG>(m_sourceY),
+                        static_cast<LONG>(m_sourceX + m_activeWidth),
+                        static_cast<LONG>(m_sourceY + m_activeHeight) };
+    RECT destinationRect = { 0,
+                             0,
+                             static_cast<LONG>(m_activeWidth),
+                             static_cast<LONG>(m_activeHeight) };
     m_pVideoContext->VideoProcessorSetStreamFrameFormat(
         m_pVideoProcessor, 0, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
-    m_pVideoContext->VideoProcessorSetStreamSourceRect(m_pVideoProcessor, 0, TRUE, &rect);
-    m_pVideoContext->VideoProcessorSetStreamDestRect(m_pVideoProcessor, 0, TRUE, &rect);
-    m_pVideoContext->VideoProcessorSetOutputTargetRect(m_pVideoProcessor, TRUE, &rect);
+    m_pVideoContext->VideoProcessorSetStreamSourceRect(
+        m_pVideoProcessor, 0, TRUE, &sourceRect);
+    m_pVideoContext->VideoProcessorSetStreamDestRect(
+        m_pVideoProcessor, 0, TRUE, &destinationRect);
+    m_pVideoContext->VideoProcessorSetOutputTargetRect(
+        m_pVideoProcessor, TRUE, &destinationRect);
 
     D3D11_VIDEO_PROCESSOR_STREAM stream = {};
     stream.Enable                       = TRUE;

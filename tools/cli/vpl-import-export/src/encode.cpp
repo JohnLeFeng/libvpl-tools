@@ -690,12 +690,42 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
                     return -1;
             }
 
+#ifdef _WIN32
+            sts = cc.ConfigureNV12Output(params->bEnableInputCrop,
+                                         params->srcCropX,
+                                         params->srcCropY,
+                                         params->srcCropW,
+                                         params->srcCropH);
+            VERIFY(MFX_ERR_NONE == sts, "ERROR: configuring capture NV12 output");
+
+            SuperResolutionInputGeometry inputGeometry = {};
+            if (!GetSuperResolutionInputGeometry(w,
+                                                 h,
+                                                 params->bEnableInputCrop,
+                                                 params->srcCropX,
+                                                 params->srcCropY,
+                                                 params->srcCropW,
+                                                 params->srcCropH,
+                                                 &inputGeometry)) {
+                return -1;
+            }
+#endif
+
+#ifdef _WIN32
+            mfxVPPParams.vpp.In.CropX         = 0;
+            mfxVPPParams.vpp.In.CropY         = 0;
+            mfxVPPParams.vpp.In.CropW         = inputGeometry.activeWidth;
+            mfxVPPParams.vpp.In.CropH         = inputGeometry.activeHeight;
+            mfxVPPParams.vpp.In.Width         = inputGeometry.surfaceWidth;
+            mfxVPPParams.vpp.In.Height        = inputGeometry.surfaceHeight;
+#else
             mfxVPPParams.vpp.In.CropX         = params->bEnableInputCrop ? params->srcCropX : 0;
             mfxVPPParams.vpp.In.CropY         = params->bEnableInputCrop ? params->srcCropY : 0;
             mfxVPPParams.vpp.In.CropW         = params->bEnableInputCrop ? params->srcCropW : w;
             mfxVPPParams.vpp.In.CropH         = params->bEnableInputCrop ? params->srcCropH : h;
-            mfxVPPParams.vpp.In.Width         = ALIGN8(w);
-            mfxVPPParams.vpp.In.Height        = ALIGN8(h);
+            mfxVPPParams.vpp.In.Width         = ALIGN16(w);
+            mfxVPPParams.vpp.In.Height        = ALIGN16(h);
+#endif
             mfxVPPParams.vpp.In.PicStruct     = MFX_PICSTRUCT_PROGRESSIVE;
             mfxVPPParams.vpp.In.FrameRateExtN = 30;
             mfxVPPParams.vpp.In.FrameRateExtD = 1;
@@ -709,8 +739,8 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
 
             mfxVPPParams.vpp.Out.CropW         = params->dstWidth;
             mfxVPPParams.vpp.Out.CropH         = params->dstHeight;
-            mfxVPPParams.vpp.Out.Width         = ALIGN8(params->dstWidth);
-            mfxVPPParams.vpp.Out.Height        = ALIGN8(params->dstHeight);
+            mfxVPPParams.vpp.Out.Width         = ALIGN16(params->dstWidth);
+            mfxVPPParams.vpp.Out.Height        = ALIGN16(params->dstHeight);
             mfxVPPParams.vpp.Out.PicStruct     = MFX_PICSTRUCT_PROGRESSIVE;
             mfxVPPParams.vpp.Out.FrameRateExtN = 30;
             mfxVPPParams.vpp.Out.FrameRateExtD = 1;

@@ -31,7 +31,11 @@ struct CaptureCtxD3D11 {
                             m_pVideoContext(),
                             m_pVideoProcessorEnum(),
                             m_pVideoProcessor(),
-                            m_pNV12Texture() {}
+                            m_pNV12Texture(),
+                            m_sourceX(),
+                            m_sourceY(),
+                            m_activeWidth(),
+                            m_activeHeight() {}
 
     ~CaptureCtxD3D11() {}
 
@@ -45,6 +49,11 @@ struct CaptureCtxD3D11 {
     }
 
     mfxStatus CaptureInit(DevCtx *devCtx);
+    mfxStatus ConfigureNV12Output(bool enableCrop,
+                                  mfxU16 cropX,
+                                  mfxU16 cropY,
+                                  mfxU16 cropWidth,
+                                  mfxU16 cropHeight);
     mfxStatus CaptureFrame(CComPtr<ID3D11Texture2D> &pTex2D);
     mfxStatus ConvertFrameToNV12(ID3D11Texture2D *pSrc, CComPtr<ID3D11Texture2D> &pDst);
     mfxStatus ReleaseFrame(void);
@@ -59,6 +68,10 @@ private:
     CComPtr<ID3D11VideoProcessorEnumerator> m_pVideoProcessorEnum;
     CComPtr<ID3D11VideoProcessor> m_pVideoProcessor;
     CComPtr<ID3D11Texture2D> m_pNV12Texture;
+    mfxU16 m_sourceX;
+    mfxU16 m_sourceY;
+    mfxU16 m_activeWidth;
+    mfxU16 m_activeHeight;
 };
 #else
 struct CaptureCtxVAAPI {
