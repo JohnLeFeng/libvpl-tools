@@ -50,6 +50,10 @@ int RunEncode(Params *params, FileInfo *fileInfo);
 // util.cpp
 void Usage(void);
 bool ParseArgsAndValidate(int argc, char *argv[], Params *params);
+bool ValidateSuperResolutionDimensions(mfxU16 srcWidth,
+									   mfxU16 srcHeight,
+									   mfxU16 dstWidth,
+									   mfxU16 dstHeight);
 const char *FourCCToString(mfxU32 fourCC);
 mfxStatus CreateVPLSession(VPLSession &vplSession);
 mfxStatus ReadEncodedStream(mfxBitstream &bs, std::ifstream &f);

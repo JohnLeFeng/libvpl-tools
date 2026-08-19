@@ -6,6 +6,8 @@
 
 #include "./util.h" //NOLINT
 
+#include <cerrno>
+
 void Usage(void) {
     printf("\n");
     printf("Usage: vpl-import-export [testmode] [options]\n\n");
@@ -28,6 +30,7 @@ void Usage(void) {
     printf("     -enc_codec     encoder codec, options = [h264, h265, av1] (default = h264)\n");
     printf("     -n [number]    max number of frames to capture (default = %d)\n", MAX_NUM_CAPTURE_FRAMES);
     printf("     -opencl file   enable OpenCL, read program from file (file is required)\n");
+    printf("     -sr [0|1|2]    enable AI super resolution during desktop capture\n");
     printf("     -timing        print timing info (may modify other options)\n");
     printf("     -mode [mode]   select surface import/export mode, options = [copy, shared]\n");
     printf("     -dbg [mask]    enable debugging options according to bitmask in mask\n");
@@ -113,6 +116,24 @@ bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
                 params->surfaceMode = SURFACE_MODE_COPY;
             else
                 return false;
+            params->bSurfaceModeExplicit = true;
+        }
+        else if (IS_ARG_EQ(s, "sr")) {
+            if (idx >= argc) {
+                printf("ERROR: super resolution algorithm is required\n");
+                return false;
+            }
+
+            char *end = nullptr;
+            errno = 0;
+            long algorithm = strtol(argv[idx++], &end, 10);
+            if (errno == ERANGE || !end || *end != '\0' || algorithm < 0 || algorithm > 2) {
+                printf("ERROR: super resolution algorithm must be 0, 1, or 2\n");
+                return false;
+            }
+
+            params->bEnableSuperResolution = true;
+            params->srAlgorithm = static_cast<mfxAISuperResolutionAlgorithm>(algorithm);
         }
         else if (IS_ARG_EQ(s, "enc_codec")) {
             std::string codecStr(argv[idx++]);
@@ -150,10 +171,12 @@ bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
         else if (IS_ARG_EQ(s, "dw")) {
             if (!ValidateSize(argv[idx++], &params->dstWidth, MAX_WIDTH))
                 return false;
+            params->bDstWidthExplicit = true;
         }
         else if (IS_ARG_EQ(s, "dh")) {
             if (!ValidateSize(argv[idx++], &params->dstHeight, MAX_WIDTH))
                 return false;
+            params->bDstHeightExplicit = true;
         }
         else if (IS_ARG_EQ(s, "nv12")) {
             params->outFourCC = MFX_FOURCC_NV12;
@@ -212,7 +235,40 @@ bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
         params->outfileName.clear();
     }
 
+    if (params->bEnableSuperResolution) {
+        if (params->testMode != TEST_MODE_CAPTURE) {
+            printf("ERROR: super resolution is supported only for desktop capture\n");
+            return false;
+        }
+        if (!params->bSurfaceModeExplicit) {
+            printf("ERROR: surface mode (-mode) is required for super resolution\n");
+            return false;
+        }
+        if (!params->bDstWidthExplicit || !params->bDstHeightExplicit) {
+            printf("ERROR: destination width (-dw) and height (-dh) are required for super resolution\n");
+            return false;
+        }
+        if (params->bEnableOpenCL) {
+            printf("ERROR: OpenCL is not compatible with super resolution\n");
+            return false;
+        }
+    }
+
     return true;
+}
+
+bool ValidateSuperResolutionDimensions(mfxU16 srcWidth,
+                                       mfxU16 srcHeight,
+                                       mfxU16 dstWidth,
+                                       mfxU16 dstHeight) {
+    if (!srcWidth || !srcHeight || !dstWidth || !dstHeight)
+        return false;
+
+    if (dstWidth <= srcWidth || dstHeight <= srcHeight)
+        return false;
+
+    return static_cast<mfxU32>(srcWidth) * dstHeight ==
+           static_cast<mfxU32>(srcHeight) * dstWidth;
 }
 
 const char *FourCCToString(mfxU32 fourCC) {

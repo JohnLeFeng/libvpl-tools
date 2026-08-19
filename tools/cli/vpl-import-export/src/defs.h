@@ -90,6 +90,7 @@ struct Params {
     mfxU32 dbgMask;
     mfxU32 codecId;
     mfxU32 maxCaptureFrames;
+    mfxAISuperResolutionAlgorithm srAlgorithm;
 
     mfxU16 srcWidth;
     mfxU16 srcHeight;
@@ -98,6 +99,10 @@ struct Params {
 
     bool bEnableOpenCL;
     bool bEnableTiming;
+    bool bEnableSuperResolution;
+    bool bDstWidthExplicit;
+    bool bDstHeightExplicit;
+    bool bSurfaceModeExplicit;
 };
 
 struct FrameInfo {
