@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: MIT
 //==============================================================================
 
+#include <chrono>
+#include <iomanip>
+
 #include "./util.h"
 
 #include "./hw-device.h"
@@ -78,12 +81,15 @@ static int ProcessStreamCaptureSuperResolution(mfxSession session,
     DevCtx *devCtx = encCtx->devCtx;
     mfxU32 frameNum = 0;
     mfxU32 framesCaptured = 0;
+    mfxU64 totalSRMicroseconds = 0;
+    mfxU32 measuredSRFrames = 0;
     bool captureFinished = false;
 
     std::cout << "Capturing desktop with AI super resolution. Hit 'Q' or 'esc' to exit...\n";
 
     while (!captureFinished) {
         mfxSurfaceHeader *extSurface = nullptr;
+        const auto srStartTime = std::chrono::steady_clock::now();
 #ifdef _WIN32
         CComPtr<ID3D11Texture2D> pTex2D;
         mfxStatus sts = cc->CaptureFrame(pTex2D);
@@ -177,6 +183,12 @@ static int ProcessStreamCaptureSuperResolution(mfxSession session,
             return -1;
         }
 
+        const auto srEndTime = std::chrono::steady_clock::now();
+        totalSRMicroseconds += static_cast<mfxU64>(
+            std::chrono::duration_cast<std::chrono::microseconds>(srEndTime - srStartTime)
+                .count());
+        measuredSRFrames++;
+
         sts = EncodeSurfaceAndWrite(session, vppOutput, fileInfo, &frameNum);
         releaseSts = vppOutput->FrameInterface->Release(vppOutput);
         if ((sts != MFX_ERR_NONE && sts != MFX_ERR_MORE_DATA) || releaseSts != MFX_ERR_NONE) {
@@ -235,7 +247,15 @@ static int ProcessStreamCaptureSuperResolution(mfxSession session,
         }
     }
 
-    std::cout << "Encoded " << frameNum << " frames\n\n";
+    const SuperResolutionPerformance performance =
+        CalculateSuperResolutionPerformance(totalSRMicroseconds, measuredSRFrames);
+    std::cout << "Encoded " << frameNum << " frames\n"
+              << std::fixed << std::setprecision(2)
+              << "Capture/crop/SR time: " << performance.totalMilliseconds / 1000.0
+              << " seconds\n"
+              << "Capture/crop/SR latency: " << performance.averageMilliseconds
+              << " ms/frame\n"
+              << "Capture/crop/SR FPS: " << performance.framesPerSecond << "\n\n";
     return 0;
 }
 #endif

@@ -381,6 +381,18 @@ bool GetSuperResolutionInputGeometry(mfxU16 frameWidth,
     return true;
 }
 
+SuperResolutionPerformance CalculateSuperResolutionPerformance(mfxU64 totalMicroseconds,
+                                                               mfxU32 frameCount) {
+    SuperResolutionPerformance performance = {};
+    if (!totalMicroseconds || !frameCount)
+        return performance;
+
+    performance.totalMilliseconds   = static_cast<double>(totalMicroseconds) / 1000.0;
+    performance.averageMilliseconds = performance.totalMilliseconds / frameCount;
+    performance.framesPerSecond     = 1000.0 / performance.averageMilliseconds;
+    return performance;
+}
+
 const char *FourCCToString(mfxU32 fourCC) {
     switch (fourCC) {
         case MFX_FOURCC_NV12:

@@ -78,6 +78,13 @@ bool GetSuperResolutionInputGeometry(mfxU16 frameWidth,
 									 mfxU16 cropWidth,
 									 mfxU16 cropHeight,
 									 SuperResolutionInputGeometry *geometry);
+struct SuperResolutionPerformance {
+	double totalMilliseconds;
+	double averageMilliseconds;
+	double framesPerSecond;
+};
+SuperResolutionPerformance CalculateSuperResolutionPerformance(mfxU64 totalMicroseconds,
+																mfxU32 frameCount);
 const char *FourCCToString(mfxU32 fourCC);
 mfxStatus CreateVPLSession(VPLSession &vplSession);
 mfxStatus ReadEncodedStream(mfxBitstream &bs, std::ifstream &f);
