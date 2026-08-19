@@ -83,6 +83,10 @@ static int ProcessStreamCaptureSuperResolution(mfxSession session,
     mfxU32 framesCaptured = 0;
     mfxU64 totalSRMicroseconds = 0;
     mfxU32 measuredSRFrames = 0;
+#ifdef _WIN32
+    mfxU64 totalProcessingMicroseconds = 0;
+    std::chrono::steady_clock::time_point processingStartTime;
+#endif
     bool captureFinished = false;
 
     std::cout << "Capturing desktop with AI super resolution. Hit 'Q' or 'esc' to exit...\n";
@@ -94,6 +98,7 @@ static int ProcessStreamCaptureSuperResolution(mfxSession session,
         CComPtr<ID3D11Texture2D> pTex2D;
         mfxStatus sts = cc->CaptureFrame(pTex2D);
         VERIFY(sts == MFX_ERR_NONE, "ERROR: CaptureFrame");
+        processingStartTime = std::chrono::steady_clock::now();
 
         CComPtr<ID3D11Texture2D> pNV12Tex2D;
         sts = cc->ConvertFrameToNV12(pTex2D, pNV12Tex2D);
@@ -187,6 +192,12 @@ static int ProcessStreamCaptureSuperResolution(mfxSession session,
         totalSRMicroseconds += static_cast<mfxU64>(
             std::chrono::duration_cast<std::chrono::microseconds>(srEndTime - srStartTime)
                 .count());
+#ifdef _WIN32
+        totalProcessingMicroseconds += static_cast<mfxU64>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                srEndTime - processingStartTime)
+                .count());
+#endif
         measuredSRFrames++;
 
         sts = EncodeSurfaceAndWrite(session, vppOutput, fileInfo, &frameNum);
@@ -255,7 +266,18 @@ static int ProcessStreamCaptureSuperResolution(mfxSession session,
               << " seconds\n"
               << "Capture/crop/SR latency: " << performance.averageMilliseconds
               << " ms/frame\n"
-              << "Capture/crop/SR FPS: " << performance.framesPerSecond << "\n\n";
+              << "Capture/crop/SR FPS: " << performance.framesPerSecond << "\n";
+#ifdef _WIN32
+    const SuperResolutionPerformance processingPerformance =
+        CalculateSuperResolutionPerformance(totalProcessingMicroseconds, measuredSRFrames);
+    std::cout << "Crop/NV12/SR time: " << processingPerformance.totalMilliseconds / 1000.0
+              << " seconds\n"
+              << "Crop/NV12/SR latency: " << processingPerformance.averageMilliseconds
+              << " ms/frame\n"
+              << "Crop/NV12/SR FPS: " << processingPerformance.framesPerSecond << "\n\n";
+#else
+    std::cout << "\n";
+#endif
     return 0;
 }
 #endif
