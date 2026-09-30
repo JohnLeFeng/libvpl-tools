@@ -50,6 +50,41 @@ int RunEncode(Params *params, FileInfo *fileInfo);
 // util.cpp
 void Usage(void);
 bool ParseArgsAndValidate(int argc, char *argv[], Params *params);
+bool ValidateSuperResolutionDimensions(mfxU16 srcWidth,
+									   mfxU16 srcHeight,
+									   mfxU16 dstWidth,
+									   mfxU16 dstHeight);
+bool ValidateSuperResolutionCrop(mfxU16 frameWidth,
+								 mfxU16 frameHeight,
+								 mfxU16 cropX,
+								 mfxU16 cropY,
+								 mfxU16 cropWidth,
+								 mfxU16 cropHeight,
+								 mfxU16 dstWidth,
+								 mfxU16 dstHeight);
+struct SuperResolutionInputGeometry {
+	mfxU16 sourceX;
+	mfxU16 sourceY;
+	mfxU16 activeWidth;
+	mfxU16 activeHeight;
+	mfxU16 surfaceWidth;
+	mfxU16 surfaceHeight;
+};
+bool GetSuperResolutionInputGeometry(mfxU16 frameWidth,
+									 mfxU16 frameHeight,
+									 bool enableCrop,
+									 mfxU16 cropX,
+									 mfxU16 cropY,
+									 mfxU16 cropWidth,
+									 mfxU16 cropHeight,
+									 SuperResolutionInputGeometry *geometry);
+struct SuperResolutionPerformance {
+	double totalMilliseconds;
+	double averageMilliseconds;
+	double framesPerSecond;
+};
+SuperResolutionPerformance CalculateSuperResolutionPerformance(mfxU64 totalMicroseconds,
+																mfxU32 frameCount);
 const char *FourCCToString(mfxU32 fourCC);
 mfxStatus CreateVPLSession(VPLSession &vplSession);
 mfxStatus ReadEncodedStream(mfxBitstream &bs, std::ifstream &f);

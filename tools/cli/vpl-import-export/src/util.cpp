@@ -6,6 +6,8 @@
 
 #include "./util.h" //NOLINT
 
+#include <cerrno>
+
 void Usage(void) {
     printf("\n");
     printf("Usage: vpl-import-export [testmode] [options]\n\n");
@@ -28,6 +30,11 @@ void Usage(void) {
     printf("     -enc_codec     encoder codec, options = [h264, h265, av1] (default = h264)\n");
     printf("     -n [number]    max number of frames to capture (default = %d)\n", MAX_NUM_CAPTURE_FRAMES);
     printf("     -opencl file   enable OpenCL, read program from file (file is required)\n");
+    printf("     -sr [0|1|2]    enable AI super resolution during desktop capture\n");
+    printf("     -scrX [x]      source crop X for super resolution\n");
+    printf("     -scrY [y]      source crop Y for super resolution\n");
+    printf("     -scrW [width]  source crop width for super resolution\n");
+    printf("     -scrH [height] source crop height for super resolution\n");
     printf("     -timing        print timing info (may modify other options)\n");
     printf("     -mode [mode]   select surface import/export mode, options = [copy, shared]\n");
     printf("     -dbg [mask]    enable debugging options according to bitmask in mask\n");
@@ -56,6 +63,22 @@ static bool ValidateSize(char *in, mfxU16 *vsize, mfxU32 vmax) {
 
     *vsize = 0;
     return false;
+}
+
+static bool ValidateCropValue(char *in, mfxU16 *value, bool allowZero) {
+    if (!in)
+        return false;
+
+    char *end = nullptr;
+    errno = 0;
+    long parsed = strtol(in, &end, 10);
+    if (errno == ERANGE || !end || *end != '\0' || parsed < (allowZero ? 0 : 1) ||
+        parsed > MAX_WIDTH) {
+        return false;
+    }
+
+    *value = static_cast<mfxU16>(parsed);
+    return true;
 }
 
 bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
@@ -113,6 +136,24 @@ bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
                 params->surfaceMode = SURFACE_MODE_COPY;
             else
                 return false;
+            params->bSurfaceModeExplicit = true;
+        }
+        else if (IS_ARG_EQ(s, "sr")) {
+            if (idx >= argc) {
+                printf("ERROR: super resolution algorithm is required\n");
+                return false;
+            }
+
+            char *end = nullptr;
+            errno = 0;
+            long algorithm = strtol(argv[idx++], &end, 10);
+            if (errno == ERANGE || !end || *end != '\0' || algorithm < 0 || algorithm > 2) {
+                printf("ERROR: super resolution algorithm must be 0, 1, or 2\n");
+                return false;
+            }
+
+            params->bEnableSuperResolution = true;
+            params->srAlgorithm = static_cast<mfxAISuperResolutionAlgorithm>(algorithm);
         }
         else if (IS_ARG_EQ(s, "enc_codec")) {
             std::string codecStr(argv[idx++]);
@@ -150,10 +191,32 @@ bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
         else if (IS_ARG_EQ(s, "dw")) {
             if (!ValidateSize(argv[idx++], &params->dstWidth, MAX_WIDTH))
                 return false;
+            params->bDstWidthExplicit = true;
         }
         else if (IS_ARG_EQ(s, "dh")) {
             if (!ValidateSize(argv[idx++], &params->dstHeight, MAX_WIDTH))
                 return false;
+            params->bDstHeightExplicit = true;
+        }
+        else if (IS_ARG_EQ(s, "scrX")) {
+            if (idx >= argc || !ValidateCropValue(argv[idx++], &params->srcCropX, true))
+                return false;
+            params->inputCropMask |= 0x01;
+        }
+        else if (IS_ARG_EQ(s, "scrY")) {
+            if (idx >= argc || !ValidateCropValue(argv[idx++], &params->srcCropY, true))
+                return false;
+            params->inputCropMask |= 0x02;
+        }
+        else if (IS_ARG_EQ(s, "scrW")) {
+            if (idx >= argc || !ValidateCropValue(argv[idx++], &params->srcCropW, false))
+                return false;
+            params->inputCropMask |= 0x04;
+        }
+        else if (IS_ARG_EQ(s, "scrH")) {
+            if (idx >= argc || !ValidateCropValue(argv[idx++], &params->srcCropH, false))
+                return false;
+            params->inputCropMask |= 0x08;
         }
         else if (IS_ARG_EQ(s, "nv12")) {
             params->outFourCC = MFX_FOURCC_NV12;
@@ -212,7 +275,122 @@ bool ParseArgsAndValidate(int argc, char *argv[], Params *params) {
         params->outfileName.clear();
     }
 
+    if (params->bEnableSuperResolution) {
+        if (params->testMode != TEST_MODE_CAPTURE) {
+            printf("ERROR: super resolution is supported only for desktop capture\n");
+            return false;
+        }
+        if (!params->bSurfaceModeExplicit) {
+            printf("ERROR: surface mode (-mode) is required for super resolution\n");
+            return false;
+        }
+        if (!params->bDstWidthExplicit || !params->bDstHeightExplicit) {
+            printf("ERROR: destination width (-dw) and height (-dh) are required for super resolution\n");
+            return false;
+        }
+        if (params->bEnableOpenCL) {
+            printf("ERROR: OpenCL is not compatible with super resolution\n");
+            return false;
+        }
+    }
+
+    if (params->inputCropMask) {
+        if (params->inputCropMask != 0x0F) {
+            printf("ERROR: -scrX, -scrY, -scrW, and -scrH must be specified together\n");
+            return false;
+        }
+        if (!params->bEnableSuperResolution) {
+            printf("ERROR: input crop options require super resolution (-sr)\n");
+            return false;
+        }
+        if ((params->srcCropX & 1) || (params->srcCropY & 1) ||
+            (params->srcCropW & 1) || (params->srcCropH & 1)) {
+            printf("ERROR: input crop values must be even\n");
+            return false;
+        }
+        params->bEnableInputCrop = true;
+    }
+
     return true;
+}
+
+bool ValidateSuperResolutionDimensions(mfxU16 srcWidth,
+                                       mfxU16 srcHeight,
+                                       mfxU16 dstWidth,
+                                       mfxU16 dstHeight) {
+    if (!srcWidth || !srcHeight || !dstWidth || !dstHeight)
+        return false;
+
+    if (dstWidth <= srcWidth || dstHeight <= srcHeight)
+        return false;
+
+    return static_cast<mfxU32>(srcWidth) * dstHeight ==
+           static_cast<mfxU32>(srcHeight) * dstWidth;
+}
+
+bool ValidateSuperResolutionCrop(mfxU16 frameWidth,
+                                 mfxU16 frameHeight,
+                                 mfxU16 cropX,
+                                 mfxU16 cropY,
+                                 mfxU16 cropWidth,
+                                 mfxU16 cropHeight,
+                                 mfxU16 dstWidth,
+                                 mfxU16 dstHeight) {
+    if (!frameWidth || !frameHeight || !cropWidth || !cropHeight || !dstWidth || !dstHeight)
+        return false;
+
+    if ((cropX & 1) || (cropY & 1) || (cropWidth & 1) || (cropHeight & 1))
+        return false;
+
+    if (static_cast<mfxU32>(cropX) + cropWidth > frameWidth ||
+        static_cast<mfxU32>(cropY) + cropHeight > frameHeight) {
+        return false;
+    }
+
+    return dstWidth > cropWidth && dstHeight > cropHeight;
+}
+
+bool GetSuperResolutionInputGeometry(mfxU16 frameWidth,
+                                     mfxU16 frameHeight,
+                                     bool enableCrop,
+                                     mfxU16 cropX,
+                                     mfxU16 cropY,
+                                     mfxU16 cropWidth,
+                                     mfxU16 cropHeight,
+                                     SuperResolutionInputGeometry *geometry) {
+    if (!geometry || !frameWidth || !frameHeight)
+        return false;
+
+    const mfxU16 sourceX      = enableCrop ? cropX : 0;
+    const mfxU16 sourceY      = enableCrop ? cropY : 0;
+    const mfxU16 activeWidth  = enableCrop ? cropWidth : frameWidth;
+    const mfxU16 activeHeight = enableCrop ? cropHeight : frameHeight;
+
+    if (!activeWidth || !activeHeight ||
+        static_cast<mfxU32>(sourceX) + activeWidth > frameWidth ||
+        static_cast<mfxU32>(sourceY) + activeHeight > frameHeight) {
+        return false;
+    }
+
+    geometry->sourceX       = sourceX;
+    geometry->sourceY       = sourceY;
+    geometry->activeWidth   = activeWidth;
+    geometry->activeHeight  = activeHeight;
+    geometry->surfaceWidth  = ALIGN16(activeWidth);
+    geometry->surfaceHeight = ALIGN16(activeHeight);
+    return true;
+}
+
+SuperResolutionPerformance CalculateSuperResolutionPerformance(mfxU64 totalMicroseconds,
+                                                               mfxU32 frameCount) {
+    SuperResolutionPerformance performance = {};
+    if (!totalMicroseconds || !frameCount)
+        return performance;
+
+    performance.totalMilliseconds   = static_cast<double>(totalMicroseconds) / 1000.0;
+    performance.averageMilliseconds = performance.totalMilliseconds / frameCount;
+    performance.framesPerSecond     = 1000.0 / performance.averageMilliseconds;
+    return performance;
 }
 
 const char *FourCCToString(mfxU32 fourCC) {

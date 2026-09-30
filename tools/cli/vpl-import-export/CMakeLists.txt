@@ -97,6 +97,17 @@ endif()
 find_package(VPL REQUIRED)
 target_link_libraries(${TARGET} PRIVATE VPL::dispatcher)
 
+if(BUILD_TESTS)
+  add_executable(vpl-import-export-test test/test-util.cpp src/util.cpp)
+  target_compile_definitions(vpl-import-export-test PRIVATE -DONEVPL_EXPERIMENTAL)
+  target_include_directories(vpl-import-export-test PRIVATE src)
+  target_link_libraries(vpl-import-export-test PRIVATE VPL::dispatcher
+                                                       GTest::gtest_main)
+
+  include(GoogleTest)
+  gtest_discover_tests(vpl-import-export-test)
+endif()
+
 if(WIN32)
   # Windows dependencies
   target_link_libraries(${TARGET} PRIVATE dxgi d3d11 dxguid.lib)

@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: MIT
 //==============================================================================
 
+#include <chrono>
+#include <iomanip>
+
 #include "./util.h"
 
 #include "./hw-device.h"
@@ -35,7 +38,249 @@ struct EncodeCtx {
     bool bEnableCapture = false;
     bool bEnableOpenCL  = false;
     bool bEnableTiming  = false;
+    bool bEnableSuperResolution = false;
 };
+
+static mfxStatus EncodeSurfaceAndWrite(mfxSession session,
+                                       mfxFrameSurface1 *surface,
+                                       FileInfo *fileInfo,
+                                       mfxU32 *frameNum) {
+    mfxSyncPoint syncp = {};
+    mfxStatus sts = MFX_ERR_NONE;
+
+    do {
+        sts = MFXVideoENCODE_EncodeFrameAsync(
+            session, nullptr, surface, &fileInfo->bitstream, &syncp);
+    } while (sts == MFX_WRN_DEVICE_BUSY);
+
+    if (sts != MFX_ERR_NONE)
+        return sts;
+
+    if (!syncp)
+        return MFX_ERR_NONE;
+
+    do {
+        sts = MFXVideoCORE_SyncOperation(session, syncp, WAIT_100_MILLISECONDS);
+    } while (sts == MFX_WRN_IN_EXECUTION);
+
+    if (sts == MFX_ERR_NONE) {
+        if (fileInfo->outfile.is_open())
+            WriteEncodedStream(fileInfo->bitstream, fileInfo->outfile);
+        (*frameNum)++;
+    }
+
+    return sts;
+}
+
+#ifdef TOOLS_ENABLE_SCREEN_CAPTURE
+static int ProcessStreamCaptureSuperResolution(mfxSession session,
+                                               FileInfo *fileInfo,
+                                               EncodeCtx *encCtx,
+                                               mfxU32 dbgMask) {
+    CaptureCtx *cc = encCtx->cc;
+    DevCtx *devCtx = encCtx->devCtx;
+    mfxU32 frameNum = 0;
+    mfxU32 framesCaptured = 0;
+    mfxU64 totalSRMicroseconds = 0;
+    mfxU32 measuredSRFrames = 0;
+#ifdef _WIN32
+    mfxU64 totalProcessingMicroseconds = 0;
+    std::chrono::steady_clock::time_point processingStartTime;
+#endif
+    bool captureFinished = false;
+
+    std::cout << "Capturing desktop with AI super resolution. Hit 'Q' or 'esc' to exit...\n";
+
+    while (!captureFinished) {
+        mfxSurfaceHeader *extSurface = nullptr;
+        const auto srStartTime = std::chrono::steady_clock::now();
+#ifdef _WIN32
+        CComPtr<ID3D11Texture2D> pTex2D;
+        mfxStatus sts = cc->CaptureFrame(pTex2D);
+        VERIFY(sts == MFX_ERR_NONE, "ERROR: CaptureFrame");
+        processingStartTime = std::chrono::steady_clock::now();
+
+        CComPtr<ID3D11Texture2D> pNV12Tex2D;
+        sts = cc->ConvertFrameToNV12(pTex2D, pNV12Tex2D);
+        if (sts != MFX_ERR_NONE) {
+            cc->ReleaseFrame();
+            std::cout << "ERROR: converting captured RGB4 surface to NV12, status " << sts
+                      << std::endl;
+            return -1;
+        }
+
+        mfxSurfaceD3D11Tex2D extSurfD3D11 = {};
+        extSurfD3D11.SurfaceInterface.Header.SurfaceType = MFX_SURFACE_TYPE_D3D11_TEX2D;
+        extSurfD3D11.SurfaceInterface.Header.SurfaceFlags = encCtx->surfaceFlags;
+        extSurfD3D11.SurfaceInterface.Header.StructSize = sizeof(mfxSurfaceD3D11Tex2D);
+        extSurfD3D11.texture2D = pNV12Tex2D;
+        extSurface = reinterpret_cast<mfxSurfaceHeader *>(&extSurfD3D11);
+#else
+        VASurfaceID vaSurfaceID = VA_INVALID_SURFACE;
+        mfxStatus sts = cc->CaptureFrame(&vaSurfaceID);
+        VERIFY(sts == MFX_ERR_NONE, "ERROR: CaptureFrame");
+
+        mfxSurfaceVAAPI extSurfVAAPI = {};
+        extSurfVAAPI.SurfaceInterface.Header.SurfaceType = MFX_SURFACE_TYPE_VAAPI;
+        extSurfVAAPI.SurfaceInterface.Header.SurfaceFlags = encCtx->surfaceFlags;
+        extSurfVAAPI.SurfaceInterface.Header.StructSize = sizeof(mfxSurfaceVAAPI);
+        extSurfVAAPI.vaDisplay = devCtx->GetVADisplay();
+        extSurfVAAPI.vaSurfaceID = vaSurfaceID;
+        extSurface = reinterpret_cast<mfxSurfaceHeader *>(&extSurfVAAPI);
+#endif
+
+        mfxFrameSurface1 *vppInput = nullptr;
+        sts = encCtx->memoryInterface->ImportFrameSurface(encCtx->memoryInterface,
+                                                          MFX_SURFACE_COMPONENT_VPP_INPUT,
+                                                          extSurface,
+                                                          &vppInput);
+        if (sts != MFX_ERR_NONE) {
+            cc->ReleaseFrame();
+            std::cout << "ERROR: importing capture surface as VPP input, status " << sts
+                      << std::endl;
+            return -1;
+        }
+
+        if (DBG_MASK(dbgMask, DBG_MASK_ACTUAL_SURFACE_FLAGS))
+            printf("[% 5d] Actual VPP input import mode = %s\n",
+                   framesCaptured,
+                   DebugGetStringSurfaceFlags(extSurface->SurfaceFlags));
+
+        if (extSurface->SurfaceFlags != encCtx->surfaceFlags) {
+            vppInput->FrameInterface->Release(vppInput);
+            cc->ReleaseFrame();
+            std::cout << "ERROR: runtime changed the requested VPP input import mode" << std::endl;
+            return -1;
+        }
+
+        mfxFrameSurface1 *vppOutput = nullptr;
+        sts = MFXMemory_GetSurfaceForVPPOut(session, &vppOutput);
+        if (sts != MFX_ERR_NONE) {
+            vppInput->FrameInterface->Release(vppInput);
+            cc->ReleaseFrame();
+            std::cout << "ERROR: acquiring VPP output surface, status " << sts << std::endl;
+            return -1;
+        }
+
+        mfxSyncPoint vppSyncp = {};
+        do {
+            sts = MFXVideoVPP_RunFrameVPPAsync(
+                session, vppInput, vppOutput, nullptr, &vppSyncp);
+        } while (sts == MFX_WRN_DEVICE_BUSY);
+
+        mfxStatus releaseSts = vppInput->FrameInterface->Release(vppInput);
+        if (sts != MFX_ERR_NONE || releaseSts != MFX_ERR_NONE) {
+            vppOutput->FrameInterface->Release(vppOutput);
+            cc->ReleaseFrame();
+            std::cout << "ERROR: running AI super resolution VPP, status " << sts << std::endl;
+            return -1;
+        }
+
+        do {
+            sts = MFXVideoCORE_SyncOperation(session, vppSyncp, WAIT_100_MILLISECONDS);
+        } while (sts == MFX_WRN_IN_EXECUTION);
+
+        releaseSts = cc->ReleaseFrame();
+        if (sts != MFX_ERR_NONE || releaseSts != MFX_ERR_NONE) {
+            vppOutput->FrameInterface->Release(vppOutput);
+            std::cout << "ERROR: synchronizing AI super resolution VPP, status " << sts
+                      << std::endl;
+            return -1;
+        }
+
+        const auto srEndTime = std::chrono::steady_clock::now();
+        totalSRMicroseconds += static_cast<mfxU64>(
+            std::chrono::duration_cast<std::chrono::microseconds>(srEndTime - srStartTime)
+                .count());
+#ifdef _WIN32
+        totalProcessingMicroseconds += static_cast<mfxU64>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                srEndTime - processingStartTime)
+                .count());
+#endif
+        measuredSRFrames++;
+
+        sts = EncodeSurfaceAndWrite(session, vppOutput, fileInfo, &frameNum);
+        releaseSts = vppOutput->FrameInterface->Release(vppOutput);
+        if ((sts != MFX_ERR_NONE && sts != MFX_ERR_MORE_DATA) || releaseSts != MFX_ERR_NONE) {
+            std::cout << "ERROR: encoding super resolution output, status " << sts << std::endl;
+            return -1;
+        }
+
+        framesCaptured++;
+        captureFinished = framesCaptured >= encCtx->maxCaptureFrames || CheckKB_Quit();
+    }
+
+    bool vppDrained = false;
+    while (!vppDrained) {
+        mfxFrameSurface1 *vppOutput = nullptr;
+        mfxStatus sts = MFXMemory_GetSurfaceForVPPOut(session, &vppOutput);
+        VERIFY(sts == MFX_ERR_NONE, "ERROR: acquiring VPP drain surface");
+
+        mfxSyncPoint vppSyncp = {};
+        do {
+            sts = MFXVideoVPP_RunFrameVPPAsync(
+                session, nullptr, vppOutput, nullptr, &vppSyncp);
+        } while (sts == MFX_WRN_DEVICE_BUSY);
+
+        if (sts == MFX_ERR_MORE_DATA) {
+            vppOutput->FrameInterface->Release(vppOutput);
+            vppDrained = true;
+            continue;
+        }
+        if (sts != MFX_ERR_NONE) {
+            vppOutput->FrameInterface->Release(vppOutput);
+            std::cout << "ERROR: draining AI super resolution VPP, status " << sts << std::endl;
+            return -1;
+        }
+
+        do {
+            sts = MFXVideoCORE_SyncOperation(session, vppSyncp, WAIT_100_MILLISECONDS);
+        } while (sts == MFX_WRN_IN_EXECUTION);
+
+        if (sts == MFX_ERR_NONE)
+            sts = EncodeSurfaceAndWrite(session, vppOutput, fileInfo, &frameNum);
+
+        mfxStatus releaseSts = vppOutput->FrameInterface->Release(vppOutput);
+        if ((sts != MFX_ERR_NONE && sts != MFX_ERR_MORE_DATA) || releaseSts != MFX_ERR_NONE) {
+            std::cout << "ERROR: encoding drained VPP output, status " << sts << std::endl;
+            return -1;
+        }
+    }
+
+    while (true) {
+        mfxStatus sts = EncodeSurfaceAndWrite(session, nullptr, fileInfo, &frameNum);
+        if (sts == MFX_ERR_MORE_DATA)
+            break;
+        if (sts != MFX_ERR_NONE) {
+            std::cout << "ERROR: draining encoder, status " << sts << std::endl;
+            return -1;
+        }
+    }
+
+    const SuperResolutionPerformance performance =
+        CalculateSuperResolutionPerformance(totalSRMicroseconds, measuredSRFrames);
+    std::cout << "Encoded " << frameNum << " frames\n"
+              << std::fixed << std::setprecision(2)
+              << "Capture/crop/SR time: " << performance.totalMilliseconds / 1000.0
+              << " seconds\n"
+              << "Capture/crop/SR latency: " << performance.averageMilliseconds
+              << " ms/frame\n"
+              << "Capture/crop/SR FPS: " << performance.framesPerSecond << "\n";
+#ifdef _WIN32
+    const SuperResolutionPerformance processingPerformance =
+        CalculateSuperResolutionPerformance(totalProcessingMicroseconds, measuredSRFrames);
+    std::cout << "Crop/NV12/SR time: " << processingPerformance.totalMilliseconds / 1000.0
+              << " seconds\n"
+              << "Crop/NV12/SR latency: " << processingPerformance.averageMilliseconds
+              << " ms/frame\n"
+              << "Crop/NV12/SR FPS: " << processingPerformance.framesPerSecond << "\n\n";
+#else
+    std::cout << "\n";
+#endif
+    return 0;
+}
+#endif
 
 static int ProcessStreamEncode(mfxSession session, FrameInfo *frameInfo, FileInfo *fileInfo, EncodeCtx *encCtx, mfxU32 dbgMask) {
     bool bIsStillGoing    = true;
@@ -350,6 +595,7 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
     EncodeCtx encCtx        = {};
     encCtx.bEnableTiming    = params->bEnableTiming;
     encCtx.maxCaptureFrames = params->maxCaptureFrames;
+    encCtx.bEnableSuperResolution = params->bEnableSuperResolution;
 
     if (params->surfaceMode == SURFACE_MODE_SHARED)
         encCtx.surfaceFlags = MFX_SURFACE_FLAG_IMPORT_SHARED;
@@ -377,7 +623,9 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
 #else
         MFX_SURFACE_TYPE_VAAPI;
 #endif
-    scEnc.SurfaceComponent = MFX_SURFACE_COMPONENT_ENCODE;
+    scEnc.SurfaceComponent = params->bEnableSuperResolution
+                                 ? MFX_SURFACE_COMPONENT_VPP_INPUT
+                                 : MFX_SURFACE_COMPONENT_ENCODE;
     scEnc.SurfaceFlags     = encCtx.surfaceFlags;
     surfaceCapsList.push_back(scEnc);
 
@@ -443,22 +691,125 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
     mfxEncParams.mfx.FrameInfo.FourCC        = MFX_FOURCC_NV12;
     mfxEncParams.mfx.FrameInfo.ChromaFormat  = MFX_CHROMAFORMAT_YUV420;
 
+    mfxVideoParam mfxVPPParams = {};
+    mfxExtVPPAISuperResolution srConfig = {};
+    mfxExtBuffer *vppExtBuffers[] = { reinterpret_cast<mfxExtBuffer *>(&srConfig) };
+
 #ifdef TOOLS_ENABLE_SCREEN_CAPTURE
     if (params->testMode == TEST_MODE_CAPTURE) {
         mfxU16 w = 0, h = 0;
         cc.GetCaptureResolution(w, h);
-        mfxEncParams.mfx.FrameInfo.CropW = w;
-        mfxEncParams.mfx.FrameInfo.CropH = h;
 
         if ((encCtx.surfaceFlags == MFX_SURFACE_FLAG_IMPORT_SHARED) && ((w != ALIGN8(w)) || (h != ALIGN8(h)))) {
             std::cout << "ERROR: desktop resolution " << w << "x" << h << " is not aligned to 8 pixels. SURFACE_MODE_SHARED is not supported. Run again with '-mode copy'"
                       << std::endl;
             return -1;
         }
+
+        if (params->bEnableSuperResolution) {
+            if (params->bEnableInputCrop) {
+                if (!ValidateSuperResolutionCrop(w,
+                                                 h,
+                                                 params->srcCropX,
+                                                 params->srcCropY,
+                                                 params->srcCropW,
+                                                 params->srcCropH,
+                                                 params->dstWidth,
+                                                 params->dstHeight)) {
+                    std::cout << "ERROR: input crop must fit within desktop resolution " << w
+                              << "x" << h << " and destination " << params->dstWidth << "x"
+                              << params->dstHeight << " must be larger than the crop" << std::endl;
+                    return -1;
+                }
+            }
+            else if (!ValidateSuperResolutionDimensions(w,
+                                                        h,
+                                                        params->dstWidth,
+                                                        params->dstHeight)) {
+                    std::cout << "ERROR: super resolution destination " << params->dstWidth << "x"
+                              << params->dstHeight << " must be larger than desktop resolution " << w
+                              << "x" << h << " and preserve its aspect ratio" << std::endl;
+                    return -1;
+            }
+
 #ifdef _WIN32
-        mfxEncParams.mfx.FrameInfo.FourCC       = MFX_FOURCC_RGB4;
-        mfxEncParams.mfx.FrameInfo.ChromaFormat = MFX_CHROMAFORMAT_YUV444;
+            sts = cc.ConfigureNV12Output(params->bEnableInputCrop,
+                                         params->srcCropX,
+                                         params->srcCropY,
+                                         params->srcCropW,
+                                         params->srcCropH);
+            VERIFY(MFX_ERR_NONE == sts, "ERROR: configuring capture NV12 output");
+
+            SuperResolutionInputGeometry inputGeometry = {};
+            if (!GetSuperResolutionInputGeometry(w,
+                                                 h,
+                                                 params->bEnableInputCrop,
+                                                 params->srcCropX,
+                                                 params->srcCropY,
+                                                 params->srcCropW,
+                                                 params->srcCropH,
+                                                 &inputGeometry)) {
+                return -1;
+            }
 #endif
+
+#ifdef _WIN32
+            mfxVPPParams.vpp.In.CropX         = 0;
+            mfxVPPParams.vpp.In.CropY         = 0;
+            mfxVPPParams.vpp.In.CropW         = inputGeometry.activeWidth;
+            mfxVPPParams.vpp.In.CropH         = inputGeometry.activeHeight;
+            mfxVPPParams.vpp.In.Width         = inputGeometry.surfaceWidth;
+            mfxVPPParams.vpp.In.Height        = inputGeometry.surfaceHeight;
+#else
+            mfxVPPParams.vpp.In.CropX         = params->bEnableInputCrop ? params->srcCropX : 0;
+            mfxVPPParams.vpp.In.CropY         = params->bEnableInputCrop ? params->srcCropY : 0;
+            mfxVPPParams.vpp.In.CropW         = params->bEnableInputCrop ? params->srcCropW : w;
+            mfxVPPParams.vpp.In.CropH         = params->bEnableInputCrop ? params->srcCropH : h;
+            mfxVPPParams.vpp.In.Width         = ALIGN16(w);
+            mfxVPPParams.vpp.In.Height        = ALIGN16(h);
+#endif
+            mfxVPPParams.vpp.In.PicStruct     = MFX_PICSTRUCT_PROGRESSIVE;
+            mfxVPPParams.vpp.In.FrameRateExtN = 30;
+            mfxVPPParams.vpp.In.FrameRateExtD = 1;
+#ifdef _WIN32
+            mfxVPPParams.vpp.In.FourCC       = MFX_FOURCC_NV12;
+            mfxVPPParams.vpp.In.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
+#else
+            mfxVPPParams.vpp.In.FourCC       = MFX_FOURCC_NV12;
+            mfxVPPParams.vpp.In.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
+#endif
+
+            mfxVPPParams.vpp.Out.CropW         = params->dstWidth;
+            mfxVPPParams.vpp.Out.CropH         = params->dstHeight;
+            mfxVPPParams.vpp.Out.Width         = ALIGN16(params->dstWidth);
+            mfxVPPParams.vpp.Out.Height        = ALIGN16(params->dstHeight);
+            mfxVPPParams.vpp.Out.PicStruct     = MFX_PICSTRUCT_PROGRESSIVE;
+            mfxVPPParams.vpp.Out.FrameRateExtN = 30;
+            mfxVPPParams.vpp.Out.FrameRateExtD = 1;
+            mfxVPPParams.vpp.Out.FourCC         = MFX_FOURCC_NV12;
+            mfxVPPParams.vpp.Out.ChromaFormat   = MFX_CHROMAFORMAT_YUV420;
+
+            mfxVPPParams.IOPattern  = MFX_IOPATTERN_IN_VIDEO_MEMORY |
+                                     MFX_IOPATTERN_OUT_VIDEO_MEMORY;
+            mfxVPPParams.AsyncDepth = 1;
+
+            srConfig.Header.BufferId = MFX_EXTBUFF_VPP_AI_SUPER_RESOLUTION;
+            srConfig.Header.BufferSz = sizeof(srConfig);
+            srConfig.SRMode           = MFX_AI_SUPER_RESOLUTION_MODE_DEFAULT;
+            srConfig.SRAlgorithm      = params->srAlgorithm;
+            mfxVPPParams.ExtParam     = vppExtBuffers;
+            mfxVPPParams.NumExtParam  = 1;
+
+            mfxEncParams.mfx.FrameInfo = mfxVPPParams.vpp.Out;
+        }
+        else {
+            mfxEncParams.mfx.FrameInfo.CropW = w;
+            mfxEncParams.mfx.FrameInfo.CropH = h;
+#ifdef _WIN32
+            mfxEncParams.mfx.FrameInfo.FourCC       = MFX_FOURCC_RGB4;
+            mfxEncParams.mfx.FrameInfo.ChromaFormat = MFX_CHROMAFORMAT_YUV444;
+#endif
+        }
     }
     else {
 #endif
@@ -474,11 +825,28 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
     mfxEncParams.IOPattern  = MFX_IOPATTERN_IN_VIDEO_MEMORY;
     mfxEncParams.AsyncDepth = 1;
 
+    if (params->bEnableSuperResolution) {
+        mfxVideoParam queriedVPPParams = {};
+        queriedVPPParams.ExtParam      = mfxVPPParams.ExtParam;
+        queriedVPPParams.NumExtParam   = mfxVPPParams.NumExtParam;
+        sts = MFXVideoVPP_Query(
+            vplSession.GetSession(), &mfxVPPParams, &queriedVPPParams);
+        if (sts != MFX_ERR_NONE) {
+            std::cout << "ERROR: querying AI super resolution VPP, status " << sts << std::endl;
+            return -1;
+        }
+        mfxVPPParams = queriedVPPParams;
+
+        sts = MFXVideoVPP_Init(vplSession.GetSession(), &mfxVPPParams);
+        VERIFY(MFX_ERR_NONE == sts, "ERROR: initializing AI super resolution VPP");
+    }
+
     // disable frame reordering for testing shared surface import (e.g. Windows capture API)
     // to support frame reordering, the application should maintain a pool of shared surfaces
     //   (QueryIOSurf) and either check the Data.Locked field or use built-in surface refcount
     //   mechanisms (where supported) to track when encoder has released each surface
-    if (encCtx.surfaceFlags == MFX_SURFACE_FLAG_IMPORT_SHARED)
+    if (!params->bEnableSuperResolution &&
+        encCtx.surfaceFlags == MFX_SURFACE_FLAG_IMPORT_SHARED)
         mfxEncParams.mfx.GopRefDist = 1;
 
     // query encoder
@@ -515,6 +883,15 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
     std::cout << "  input colorspace = " << FourCCToString(mfxEncParams.mfx.FrameInfo.FourCC) << std::endl;
     std::cout << "  outfile = " << (params->outfileName.empty() ? "none" : params->outfileName) << std::endl;
     std::cout << "  output resolution = " << frameInfo.width << "x" << frameInfo.height << std::endl;
+    if (params->bEnableSuperResolution) {
+        std::cout << "  AI super resolution algorithm = " << params->srAlgorithm << std::endl;
+        std::cout << "  VPP input import mode = "
+                  << DebugGetStringSurfaceFlags(encCtx.surfaceFlags) << std::endl;
+        if (params->bEnableInputCrop) {
+            std::cout << "  VPP input crop = " << params->srcCropX << "," << params->srcCropY
+                      << "," << params->srcCropW << "," << params->srcCropH << std::endl;
+        }
+    }
     std::cout << std::endl << std::endl;
 
     // get interface for ImportFrameSurface
@@ -526,11 +903,30 @@ int RunEncode(Params *params, FileInfo *fileInfo) {
     }
 
     // run main processing loop
-    int err = ProcessStreamEncode(vplSession.GetSession(), &frameInfo, fileInfo, &encCtx, params->dbgMask);
+    int err = 0;
+#ifdef TOOLS_ENABLE_SCREEN_CAPTURE
+    if (params->bEnableSuperResolution)
+        err = ProcessStreamCaptureSuperResolution(
+            vplSession.GetSession(), fileInfo, &encCtx, params->dbgMask);
+    else
+#endif
+        err = ProcessStreamEncode(
+            vplSession.GetSession(), &frameInfo, fileInfo, &encCtx, params->dbgMask);
 
     if (err) {
         std::cout << "ERROR: ProcessStream() returned " << err << std::endl;
+        if (params->bEnableSuperResolution) {
+            MFXVideoENCODE_Close(vplSession.GetSession());
+            MFXVideoVPP_Close(vplSession.GetSession());
+        }
         return err;
+    }
+
+    if (params->bEnableSuperResolution) {
+        mfxStatus encCloseSts = MFXVideoENCODE_Close(vplSession.GetSession());
+        mfxStatus vppCloseSts = MFXVideoVPP_Close(vplSession.GetSession());
+        VERIFY(MFX_ERR_NONE == encCloseSts, "ERROR: closing encoder");
+        VERIFY(MFX_ERR_NONE == vppCloseSts, "ERROR: closing AI super resolution VPP");
     }
 
     // dtor will call Close() automatically when it goes out of scope (e.g. error causes early exit).
